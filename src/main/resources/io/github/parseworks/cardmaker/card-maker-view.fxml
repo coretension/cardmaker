@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.input.KeyCombination?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.canvas.Canvas?>
+
+<BorderPane xmlns:fx="http://javafx.com/fxml" fx:controller="io.github.parseworks.cardmaker.CardMakerController">
+    <top>
+        <MenuBar>
+            <Menu text="File">
+                <MenuItem text="New Deck" onAction="#handleNewDeck"/>
+                <MenuItem text="Open Deck" onAction="#handleOpenDeck"/>
+                <MenuItem text="Save Deck" onAction="#handleSaveDeck"/>
+                <MenuItem text="Save Deck As..." onAction="#handleSaveDeckAs"/>
+                <SeparatorMenuItem/>
+                <MenuItem text="Load CSV" onAction="#handleLoadCsv"/>
+                <MenuItem text="View CSV Data" onAction="#handleViewData"/>
+                <MenuItem text="Exit" onAction="#handleExit"/>
+            </Menu>
+            <Menu text="View">
+                <CheckMenuItem text="Preview Mode" onAction="#handleTogglePreviewMode" accelerator="Shortcut+P"/>
+                <CheckMenuItem text="Show Clipped Content" onAction="#handleToggleShowClippedContent"/>
+            </Menu>
+            <Menu text="Insert">
+                <MenuItem text="Add Text" onAction="#handleAddText"/>
+                <MenuItem text="Add Image" onAction="#handleAddImage"/>
+                <MenuItem text="Add Container" onAction="#handleAddContainer"/>
+                <MenuItem text="Add Font Config" onAction="#handleAddFont"/>
+            </Menu>
+        </MenuBar>
+    </top>
+    <left>
+        <VBox spacing="10" prefWidth="200" style="-fx-background-color: #eee;">
+            <padding>
+                <Insets top="10" right="10" bottom="10" left="10"/>
+            </padding>
+            <Label text="Elements" style="-fx-font-weight: bold;"/>
+            <HBox spacing="5">
+                <Button text="Del" onAction="#handleDeleteElement"/>
+            </HBox>
+            <TreeView fx:id="elementTreeView" VBox.vgrow="ALWAYS"/>
+        </VBox>
+    </left>
+    <center>
+        <ScrollPane fitToHeight="true" fitToWidth="true" style="-fx-background-color: #999;">
+            <StackPane fx:id="canvasContainer">
+                <Pane fx:id="cardCanvas" style="-fx-background-color: white; -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.4), 10, 0, 0, 0);"/>
+            </StackPane>
+        </ScrollPane>
+    </center>
+    <right>
+        <VBox spacing="10" prefWidth="250" style="-fx-background-color: #eee;">
+            <padding>
+                <Insets top="10" right="10" bottom="10" left="10"/>
+            </padding>
+            <Label text="Properties" style="-fx-font-weight: bold;"/>
+            <VBox fx:id="propertiesPane" spacing="10"/>
+            <Separator/>
+            <Label text="Data Preview" style="-fx-font-weight: bold;"/>
+            <HBox spacing="5" alignment="CENTER">
+                <Button text="&lt;" onAction="#handlePrevRecord"/>
+                <Label fx:id="recordLabel" text="0 / 0"/>
+                <Button text="&gt;" onAction="#handleNextRecord"/>
+                <Button text="View" onAction="#handleViewData"/>
+            </HBox>
+        </VBox>
+    </right>
+</BorderPane>
