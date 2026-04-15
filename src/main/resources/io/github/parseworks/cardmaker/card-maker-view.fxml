@@ -5,6 +5,7 @@
 <?import javafx.scene.input.KeyCombination?>
 <?import javafx.scene.layout.*?>
 <?import javafx.scene.canvas.Canvas?>
+<?import javafx.scene.Group?>
 
 <BorderPane xmlns:fx="http://javafx.com/fxml" fx:controller="io.github.parseworks.cardmaker.CardMakerController">
     <top>
@@ -17,17 +18,27 @@
                 <SeparatorMenuItem/>
                 <MenuItem text="Load CSV" onAction="#handleLoadCsv"/>
                 <MenuItem text="View CSV Data" onAction="#handleViewData"/>
+                <MenuItem text="Print Deck" onAction="#handlePrintDeck"/>
                 <MenuItem text="Exit" onAction="#handleExit"/>
             </Menu>
             <Menu text="View">
                 <CheckMenuItem text="Preview Mode" onAction="#handleTogglePreviewMode" accelerator="Shortcut+P"/>
                 <CheckMenuItem text="Show Clipped Content" onAction="#handleToggleShowClippedContent"/>
+                <SeparatorMenuItem/>
+                <MenuItem text="Zoom In" onAction="#handleZoomIn" accelerator="Shortcut+EQUALS"/>
+                <MenuItem text="Zoom Out" onAction="#handleZoomOut" accelerator="Shortcut+MINUS"/>
+                <MenuItem text="Reset Zoom" onAction="#handleResetZoom" accelerator="Shortcut+0"/>
             </Menu>
             <Menu text="Insert">
                 <MenuItem text="Add Text" onAction="#handleAddText"/>
                 <MenuItem text="Add Image" onAction="#handleAddImage"/>
+                <MenuItem text="Add Icons" onAction="#handleAddIcon"/>
+                <MenuItem text="Add Condition" onAction="#handleAddCondition"/>
                 <MenuItem text="Add Container" onAction="#handleAddContainer"/>
                 <MenuItem text="Add Font Config" onAction="#handleAddFont"/>
+                <SeparatorMenuItem/>
+                <MenuItem text="Manage Icon Library" onAction="#handleManageIconLibrary"/>
+                <MenuItem text="Manage Font Library" onAction="#handleManageFontLibrary"/>
             </Menu>
         </MenuBar>
     </top>
@@ -37,16 +48,25 @@
                 <Insets top="10" right="10" bottom="10" left="10"/>
             </padding>
             <Label text="Elements" style="-fx-font-weight: bold;"/>
-            <HBox spacing="5">
-                <Button text="Del" onAction="#handleDeleteElement"/>
-            </HBox>
             <TreeView fx:id="elementTreeView" VBox.vgrow="ALWAYS"/>
         </VBox>
     </left>
     <center>
         <ScrollPane fitToHeight="true" fitToWidth="true" style="-fx-background-color: #999;">
             <StackPane fx:id="canvasContainer">
-                <Pane fx:id="cardCanvas" style="-fx-background-color: white; -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.4), 10, 0, 0, 0);"/>
+                <Group>
+                    <Pane fx:id="cardCanvas" pickOnBounds="true" style="-fx-background-color: white; -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.4), 10, 0, 0, 0);"/>
+                </Group>
+                <Label fx:id="sizeLabel" text="0x0 mm" StackPane.alignment="BOTTOM_LEFT" mouseTransparent="true" style="-fx-background-color: rgba(0,0,0,0.5); -fx-text-fill: white; -fx-padding: 5; -fx-background-radius: 5;">
+                    <StackPane.margin>
+                        <Insets bottom="10" left="10"/>
+                    </StackPane.margin>
+                </Label>
+                <Label fx:id="zoomLabel" text="100%" StackPane.alignment="BOTTOM_RIGHT" mouseTransparent="true" style="-fx-background-color: rgba(0,0,0,0.5); -fx-text-fill: white; -fx-padding: 5; -fx-background-radius: 5;">
+                    <StackPane.margin>
+                        <Insets bottom="10" right="10"/>
+                    </StackPane.margin>
+                </Label>
             </StackPane>
         </ScrollPane>
     </center>

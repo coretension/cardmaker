@@ -101,4 +101,31 @@ public class DataMergerTest {
         Map<String, String> record = new HashMap<>();
         assertEquals("{{Name}}", merger.merge("{{Name}}", record));
     }
+
+    @Test
+    public void testEvaluateCondition() {
+        DataMerger merger = new DataMerger();
+        Map<String, String> record = new HashMap<>();
+        record.put("Type", "Spell");
+        record.put("Power", "10");
+
+        assertTrue(merger.evaluateCondition("{{Type}} == Spell", record));
+        assertFalse(merger.evaluateCondition("{{Type}} == Creature", record));
+        assertTrue(merger.evaluateCondition("{{Type}} != Creature", record));
+        assertFalse(merger.evaluateCondition("{{Type}} != Spell", record));
+        
+        assertTrue(merger.evaluateCondition("{{Power}} == 10", record));
+        assertTrue(merger.evaluateCondition("10 == {{Power}}", record));
+        
+        // No operator: checks if not empty after merge
+        assertTrue(merger.evaluateCondition("{{Type}}", record));
+        assertFalse(merger.evaluateCondition("{{Unknown}}", record));
+        
+        // Empty condition: always true
+        assertTrue(merger.evaluateCondition("", record));
+        assertTrue(merger.evaluateCondition(null, record));
+        
+        // Null record: false if condition present
+        assertFalse(merger.evaluateCondition("{{Type}}", null));
+    }
 }

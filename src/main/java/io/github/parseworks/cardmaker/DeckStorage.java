@@ -40,6 +40,11 @@ public class DeckStorage {
         return mapper.readValue(file, CardTemplate.class);
     }
 
+    public static <T> T clone(T object, Class<T> clazz) throws IOException {
+        String json = mapper.writeValueAsString(object);
+        return mapper.readValue(json, clazz);
+    }
+
     public static File getTempFile() {
         String userHome = System.getProperty("user.home");
         Path path = Paths.get(userHome, ".cardmaker", "temp_deck.json");
@@ -93,9 +98,26 @@ public class DeckStorage {
         @Override
         public ObjectProperty deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
             JsonNode node = p.getCodec().readTree(p);
-            // This is a bit tricky for generic ObjectProperty. 
-            // For known types like FontWeight, it might need special handling if not automatically handled.
-            // But Jackson might just work if we provide the value.
+            if (node.isTextual()) {
+                String textValue = node.asText();
+                try {
+                    return new SimpleObjectProperty(ContainerElement.LayoutType.valueOf(textValue));
+                } catch (IllegalArgumentException e0) {
+                    try {
+                        return new SimpleObjectProperty(ContainerElement.Alignment.valueOf(textValue));
+                    } catch (IllegalArgumentException e1a) {
+                        try {
+                            return new SimpleObjectProperty(javafx.scene.text.FontWeight.valueOf(textValue));
+                        } catch (IllegalArgumentException e1) {
+                            try {
+                                return new SimpleObjectProperty(javafx.scene.text.FontPosture.valueOf(textValue));
+                            } catch (IllegalArgumentException e2) {
+                                return new SimpleObjectProperty(textValue);
+                            }
+                        }
+                    }
+                }
+            }
             return new SimpleObjectProperty(node);
         }
     }

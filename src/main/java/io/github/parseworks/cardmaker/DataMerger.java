@@ -133,10 +133,42 @@ public class DataMerger {
     }
 
     public String merge(String template, Map<String, String> record) {
+        if (template == null) return null;
         String result = template;
         for (Map.Entry<String, String> entry : record.entrySet()) {
             result = result.replace("{{" + entry.getKey() + "}}", entry.getValue());
         }
         return result;
+    }
+
+    public boolean evaluateCondition(String condition, Map<String, String> record) {
+        if (condition == null || condition.trim().isEmpty()) return true;
+        if (record == null) return false;
+
+        String mergedCondition = merge(condition, record).trim();
+        
+        // Simple equality: "val1 == val2"
+        if (mergedCondition.contains("==")) {
+            String[] parts = mergedCondition.split("==");
+            if (parts.length == 2) {
+                return parts[0].trim().equals(parts[1].trim());
+            }
+        }
+        
+        // Simple inequality: "val1 != val2"
+        if (mergedCondition.contains("!=")) {
+            String[] parts = mergedCondition.split("!=");
+            if (parts.length == 2) {
+                return !parts[0].trim().equals(parts[1].trim());
+            }
+        }
+
+        // Check if merge actually did something or if the tag remains
+        if (mergedCondition.startsWith("{{") && mergedCondition.endsWith("}}")) {
+            return false;
+        }
+
+        // Just check if not empty if no operator
+        return !mergedCondition.isEmpty();
     }
 }

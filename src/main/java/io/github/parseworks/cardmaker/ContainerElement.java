@@ -5,7 +5,7 @@ import javafx.beans.property.*;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 
-public class ContainerElement extends CardElement {
+public class ContainerElement extends ParentCardElement {
     public enum LayoutType { POSITIONAL, FLOW, VERTICAL, HORIZONTAL }
     public enum Alignment { LEFT, CENTER, RIGHT }
 
@@ -13,10 +13,10 @@ public class ContainerElement extends CardElement {
     private final DoubleProperty height = new SimpleDoubleProperty(100);
     private final BooleanProperty lockAspectRatio = new SimpleBooleanProperty(false);
     private final DoubleProperty alpha = new SimpleDoubleProperty(1.0);
-    private final ObservableList<CardElement> children = FXCollections.observableArrayList();
     private final StringProperty backgroundColor = new SimpleStringProperty("#FFFFFF00"); // Transparent by default
     private final ObjectProperty<LayoutType> layoutType = new SimpleObjectProperty<>(LayoutType.POSITIONAL);
     private final ObjectProperty<Alignment> alignment = new SimpleObjectProperty<>(Alignment.LEFT);
+    private final DoubleProperty spacing = new SimpleDoubleProperty(0);
 
     public ContainerElement() {
         this("Container");
@@ -56,13 +56,16 @@ public class ContainerElement extends CardElement {
     @JsonIgnore
     public ObjectProperty<Alignment> alignmentProperty() { return alignment; }
 
+    public double getSpacing() { return spacing.get(); }
+    public void setSpacing(double value) { spacing.set(value); }
+    @JsonIgnore
+    public DoubleProperty spacingProperty() { return spacing; }
+
     public boolean isLockAspectRatio() { return lockAspectRatio.get(); }
     public void setLockAspectRatio(boolean value) { lockAspectRatio.set(value); }
     @JsonIgnore
     public BooleanProperty lockAspectRatioProperty() { return lockAspectRatio; }
 
-    public ObservableList<CardElement> getChildren() { return children; }
-    
     @Override
     public String toString() {
         return getName();

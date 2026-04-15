@@ -11,6 +11,9 @@ public class FontElement extends CardElement {
     private final ObjectProperty<FontWeight> fontWeight = new SimpleObjectProperty<>(FontWeight.NORMAL);
     private final ObjectProperty<FontPosture> fontPosture = new SimpleObjectProperty<>(FontPosture.REGULAR);
     private final StringProperty color = new SimpleStringProperty("#000000");
+    private final DoubleProperty angle = new SimpleDoubleProperty(0);
+    private final DoubleProperty outlineWidth = new SimpleDoubleProperty(0);
+    private final StringProperty outlineColor = new SimpleStringProperty("#000000");
 
     public FontElement() {
         this("Font");
@@ -44,4 +47,19 @@ public class FontElement extends CardElement {
     public void setColor(String value) { color.set(value); }
     @JsonIgnore
     public StringProperty colorProperty() { return color; }
+
+    public double getAngle() { return angle.get(); }
+    public void setAngle(double value) { angle.set(value); }
+    @JsonIgnore
+    public DoubleProperty angleProperty() { return angle; }
+
+    public double getOutlineWidth() { return outlineWidth.get(); }
+    public void setOutlineWidth(double value) { outlineWidth.set(value); }
+    @JsonIgnore
+    public DoubleProperty outlineWidthProperty() { return outlineWidth; }
+
+    public String getOutlineColor() { return outlineColor.get(); }
+    public void setOutlineColor(String value) { outlineColor.set(value); }
+    @JsonIgnore
+    public StringProperty outlineColorProperty() { return outlineColor; }
 }

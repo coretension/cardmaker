@@ -10,7 +10,7 @@ public enum CardDimension {
     private final double widthInches;
     private final double heightInches;
     private final String displayName;
-    public static final double DPI = 96.0;
+    private static double dpi = 96.0;
 
     CardDimension(double widthInches, double heightInches, String displayName) {
         this.widthInches = widthInches;
@@ -18,8 +18,15 @@ public enum CardDimension {
         this.displayName = displayName;
     }
 
-    public double getWidthPx() { return widthInches * DPI; }
-    public double getHeightPx() { return heightInches * DPI; }
+    public static double getDpi() { return dpi; }
+    public static void setDpi(double newDpi) { dpi = newDpi; }
+
+    public double getWidthPx() { return widthInches * dpi; }
+    public double getHeightPx() { return heightInches * dpi; }
+    
+    public double getWidthMm() { return widthInches * 25.4; }
+    public double getHeightMm() { return heightInches * 25.4; }
+    
     public String getDisplayName() { return displayName; }
 
     @Override

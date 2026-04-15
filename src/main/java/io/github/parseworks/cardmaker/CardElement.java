@@ -14,7 +14,10 @@ import javafx.beans.property.*;
     @JsonSubTypes.Type(value = TextElement.class, name = "text"),
     @JsonSubTypes.Type(value = ImageElement.class, name = "image"),
     @JsonSubTypes.Type(value = FontElement.class, name = "font"),
-    @JsonSubTypes.Type(value = ContainerElement.class, name = "container")
+    @JsonSubTypes.Type(value = ContainerElement.class, name = "container"),
+    @JsonSubTypes.Type(value = ConditionElement.class, name = "condition"),
+    @JsonSubTypes.Type(value = ParentCardElement.class, name = "parent"),
+    @JsonSubTypes.Type(value = IconElement.class, name = "icon")
 })
 public abstract class CardElement {
     protected final DoubleProperty x = new SimpleDoubleProperty(0);

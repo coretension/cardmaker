@@ -1,5 +1,7 @@
 package io.github.parseworks.cardmaker;
 
+import javafx.scene.text.FontPosture;
+import javafx.scene.text.FontWeight;
 import org.junit.jupiter.api.Test;
 import java.io.File;
 import java.io.IOException;
@@ -18,7 +20,11 @@ public class DeckStorageTest {
         text.setX(10);
         text.setY(20);
         text.setText("Hello {{Name}}");
-        template.getElements().add(text);
+        
+        ConditionElement conditionNode = new ConditionElement("Test Condition");
+        conditionNode.setCondition("{{Name}} == Jason");
+        conditionNode.getChildren().add(text);
+        template.getElements().add(conditionNode);
 
         ContainerElement container = new ContainerElement("Test Container");
         container.setX(50);
@@ -29,7 +35,21 @@ public class DeckStorageTest {
         container.setBackgroundColor("#FF0000");
         container.setLayoutType(ContainerElement.LayoutType.HORIZONTAL);
         container.setAlignment(ContainerElement.Alignment.RIGHT);
-        template.getElements().add(container);
+        
+        ConditionElement conditionNode2 = new ConditionElement("Test Condition 2");
+        conditionNode2.setCondition("{{Type}} == Item");
+        conditionNode2.getChildren().add(container);
+        template.getElements().add(conditionNode2);
+
+        FontElement font = new FontElement("HeaderFont");
+        font.setFontFamily("Times New Roman");
+        font.setFontSize(24);
+        font.setFontWeight(FontWeight.BOLD);
+        font.setFontPosture(FontPosture.ITALIC);
+        font.setColor("#0000FF");
+        template.getFontLibrary().getFonts().put("Header", font);
+
+        text.setFontConfigName("Header");
         
         File tempFile = Files.createTempFile("deck", ".json").toFile();
         try {
@@ -40,16 +60,26 @@ public class DeckStorageTest {
             assertEquals(2, loaded.getElements().size());
             
             CardElement el = loaded.getElements().get(0);
-            assertTrue(el instanceof TextElement);
-            TextElement loadedText = (TextElement) el;
+            assertTrue(el instanceof ConditionElement);
+            ConditionElement loadedCondition = (ConditionElement) el;
+            assertEquals("Test Condition", loadedCondition.getName());
+            assertEquals("{{Name}} == Jason", loadedCondition.getCondition());
+            assertEquals(1, loadedCondition.getChildren().size());
+            
+            TextElement loadedText = (TextElement) loadedCondition.getChildren().get(0);
             assertEquals("Test Text", loadedText.getName());
             assertEquals(10, loadedText.getX());
             assertEquals(20, loadedText.getY());
             assertEquals("Hello {{Name}}", loadedText.getText());
 
             CardElement el2 = loaded.getElements().get(1);
-            assertTrue(el2 instanceof ContainerElement);
-            ContainerElement loadedContainer = (ContainerElement) el2;
+            assertTrue(el2 instanceof ConditionElement);
+            ConditionElement loadedCondition2 = (ConditionElement) el2;
+            assertEquals("Test Condition 2", loadedCondition2.getName());
+            assertEquals("{{Type}} == Item", loadedCondition2.getCondition());
+            assertEquals(1, loadedCondition2.getChildren().size());
+            
+            ContainerElement loadedContainer = (ContainerElement) loadedCondition2.getChildren().get(0);
             assertEquals("Test Container", loadedContainer.getName());
             assertEquals(50, loadedContainer.getX());
             assertEquals(60, loadedContainer.getY());
@@ -59,6 +89,16 @@ public class DeckStorageTest {
             assertEquals("#FF0000", loadedContainer.getBackgroundColor());
             assertEquals(ContainerElement.LayoutType.HORIZONTAL, loadedContainer.getLayoutType());
             assertEquals(ContainerElement.Alignment.RIGHT, loadedContainer.getAlignment());
+
+            assertTrue(loaded.getFontLibrary().getFonts().containsKey("Header"));
+            FontElement loadedFont = loaded.getFontLibrary().getFonts().get("Header");
+            assertEquals("Times New Roman", loadedFont.getFontFamily());
+            assertEquals(24, loadedFont.getFontSize());
+            assertEquals(FontWeight.BOLD, loadedFont.getFontWeight());
+            assertEquals(FontPosture.ITALIC, loadedFont.getFontPosture());
+            assertEquals("#0000FF", loadedFont.getColor());
+
+            assertEquals("Header", loadedText.getFontConfigName());
         } finally {
             tempFile.delete();
         }

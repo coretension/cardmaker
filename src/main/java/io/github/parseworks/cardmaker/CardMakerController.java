@@ -1,16 +1,22 @@
 package io.github.parseworks.cardmaker;
 
+import javafx.collections.FXCollections;
 import javafx.collections.ListChangeListener;
 import javafx.collections.ObservableList;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
+import javafx.geometry.Insets;
+import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.*;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.effect.DropShadow;
 import javafx.scene.input.*;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyCodeCombination;
 import javafx.scene.layout.*;
+import javafx.scene.layout.Region;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.Text;
@@ -20,9 +26,13 @@ import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.value.ChangeListener;
+import javafx.embed.swing.SwingFXUtils;
 
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
+import java.util.*;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -35,6 +45,8 @@ public class CardMakerController {
     @FXML private VBox propertiesPane;
     @FXML private Label recordLabel;
     @FXML private StackPane canvasContainer;
+    @FXML private Label zoomLabel;
+    @FXML private Label sizeLabel;
 
     private CardTemplate currentTemplate = new CardTemplate();
     private List<Map<String, String>> csvData = new ArrayList<>();
@@ -42,13 +54,18 @@ public class CardMakerController {
     private int currentRecordIndex = -1;
     private final DataMerger dataMerger = new DataMerger();
     private File currentFile;
+    private File lastOpenedDirectory;
     private boolean previewMode = false;
     private boolean showClippedContent = false;
+    private double zoomLevel = 1.0;
+    private CardElement copiedElement;
 
     @FXML
     public void initialize() {
         setupTemplateListeners();
         updateCanvasSize();
+        updateSizeLabel();
+        setupZoomListeners();
         loadTempDeck();
         
         elementTreeView.setCellFactory(tv -> {
@@ -60,6 +77,7 @@ public class CardMakerController {
                     if (empty || item == null) {
                         setText(null);
                         setGraphic(null);
+                        setContextMenu(null);
                     } else {
                         final String type;
                         if (item instanceof TextElement) type = "[T]";
@@ -68,6 +86,36 @@ public class CardMakerController {
                         else if (item instanceof FontElement) type = "[F]";
                         else type = "[E]";
                         textProperty().bind(item.nameProperty().map(name -> type + " " + name));
+                        
+                        ContextMenu contextMenu = new ContextMenu();
+                        MenuItem copyItem = new MenuItem("Copy");
+                        copyItem.setAccelerator(new KeyCodeCombination(KeyCode.C, KeyCombination.SHORTCUT_DOWN));
+                        copyItem.setOnAction(e -> handleCopyElement(null));
+
+                        MenuItem pasteItem = new MenuItem("Paste");
+                        pasteItem.setAccelerator(new KeyCodeCombination(KeyCode.V, KeyCombination.SHORTCUT_DOWN));
+                        pasteItem.setOnAction(e -> handlePasteElement(null));
+                        pasteItem.setDisable(copiedElement == null);
+
+                        MenuItem deleteItem = new MenuItem("Delete");
+                        deleteItem.setAccelerator(new KeyCodeCombination(KeyCode.DELETE));
+                        deleteItem.setOnAction(e -> {
+                            elementTreeView.getSelectionModel().select(getTreeItem());
+                            handleDeleteElement(null);
+                        });
+                        MenuItem moveForward = new MenuItem("Move Forward");
+                        moveForward.setOnAction(e -> handleMoveForward(null));
+                        MenuItem moveBackward = new MenuItem("Move Backward");
+                        moveBackward.setOnAction(e -> handleMoveBackward(null));
+                        MenuItem bringToFront = new MenuItem("Bring to Front");
+                        bringToFront.setOnAction(e -> handleBringToFront(null));
+                        MenuItem sendToBack = new MenuItem("Send to Back");
+                        sendToBack.setOnAction(e -> handleSendToBack(null));
+
+                        contextMenu.getItems().addAll(copyItem, pasteItem, new SeparatorMenuItem(), 
+                                moveForward, moveBackward, bringToFront, sendToBack,
+                                new SeparatorMenuItem(), deleteItem);
+                        setContextMenu(contextMenu);
                     }
                 }
             };
@@ -124,6 +172,55 @@ public class CardMakerController {
             return cell;
         });
 
+        elementTreeView.setOnKeyPressed(event -> {
+            CardElement selected = getSelectedElement();
+            if (selected == null) return;
+
+            if (event.getCode() == KeyCode.UP) {
+                saveExpandedState(elementTreeView.getRoot());
+                ObservableList<CardElement> parentList = findParentList(selected);
+                if (parentList != null) {
+                    int index = parentList.indexOf(selected);
+                    if (index > 0) {
+                        parentList.remove(selected);
+                        parentList.add(index - 1, selected);
+                        renderTemplate();
+                        selectElement(selected);
+                        event.consume();
+                    }
+                }
+            } else if (event.getCode() == KeyCode.DOWN) {
+                saveExpandedState(elementTreeView.getRoot());
+                ObservableList<CardElement> parentList = findParentList(selected);
+                if (parentList != null) {
+                    int index = parentList.indexOf(selected);
+                    if (index < parentList.size() - 1) {
+                        parentList.remove(selected);
+                        parentList.add(index + 1, selected);
+                        renderTemplate();
+                        selectElement(selected);
+                        event.consume();
+                    }
+                }
+            } else if (event.getCode() == KeyCode.LEFT) {
+                saveExpandedState(elementTreeView.getRoot());
+                ParentCardElement parent = findParentElement(selected);
+                if (parent != null) {
+                    ObservableList<CardElement> parentList = parent.getChildren();
+                    parentList.remove(selected);
+                    
+                    ObservableList<CardElement> grandparentList = findParentList(parent);
+                    if (grandparentList != null) {
+                        int parentIndex = grandparentList.indexOf(parent);
+                        grandparentList.add(parentIndex + 1, selected);
+                        renderTemplate();
+                        selectElement(selected);
+                        event.consume();
+                    }
+                }
+            }
+        });
+
         // Allow dropping on the TreeView itself (empty space) to move to root
         elementTreeView.setOnDragOver(event -> {
             if (event.getGestureSource() instanceof TreeCell && event.getDragboard().hasString()) {
@@ -140,6 +237,7 @@ public class CardMakerController {
                 if (draggedItem != null) {
                     CardElement draggedElement = draggedItem.getValue();
                     if (draggedElement != null) {
+                        saveExpandedState(elementTreeView.getRoot());
                         // If it wasn't already handled by a cell, it might be a drop on empty space
                         // We move it to the end of the root elements
                         ObservableList<CardElement> sourceParentList = findParentList(draggedElement);
@@ -164,6 +262,7 @@ public class CardMakerController {
     }
 
     private void moveElement(CardElement element, TreeItem<CardElement> targetItem, double relativeY) {
+        saveExpandedState(elementTreeView.getRoot());
         ObservableList<CardElement> sourceParentList = findParentList(element);
         if (sourceParentList == null) return;
 
@@ -171,10 +270,10 @@ public class CardMakerController {
         ObservableList<CardElement> targetParentList;
         int targetIndex;
 
-        if (targetElement instanceof ContainerElement ce && relativeY > 0.25 && relativeY < 0.75) {
-            // Drop inside the container
-            targetParentList = ce.getChildren();
-            targetIndex = targetParentList.size(); // Add to end of container by default
+        if (targetElement instanceof ParentCardElement pe && relativeY > 0.25 && relativeY < 0.75) {
+            // Drop inside the parent element (Container or Condition)
+            targetParentList = pe.getChildren();
+            targetIndex = targetParentList.size(); // Add to end of children by default
         } else {
             // Drop as sibling
             targetParentList = findParentList(targetElement);
@@ -209,23 +308,44 @@ public class CardMakerController {
 
     private boolean isDescendant(CardElement ancestor, CardElement potentialDescendant) {
         if (ancestor == potentialDescendant) return true;
-        if (ancestor instanceof ContainerElement ce) {
-            for (CardElement child : ce.getChildren()) {
+        if (ancestor instanceof ParentCardElement pe) {
+            for (CardElement child : pe.getChildren()) {
                 if (isDescendant(child, potentialDescendant)) return true;
             }
         }
         return false;
     }
 
+    private final Set<CardElement> expandedElements = new HashSet<>();
+    private final ListChangeListener<CardElement> nestedListener = c -> {
+        saveExpandedState(elementTreeView.getRoot());
+        rebuildTree();
+        renderTemplate();
+    };
+
+    private void saveExpandedState(TreeItem<CardElement> item) {
+        if (item == null) return;
+        if (item.isExpanded() && item.getValue() != null) {
+            expandedElements.add(item.getValue());
+        } else {
+            expandedElements.remove(item.getValue());
+        }
+        for (TreeItem<CardElement> child : item.getChildren()) {
+            saveExpandedState(child);
+        }
+    }
+
     private void setupTemplateListeners() {
         rebuildTree();
         currentTemplate.getElements().addListener((ListChangeListener<CardElement>) c -> {
+            saveExpandedState(elementTreeView.getRoot());
             rebuildTree();
             renderTemplate();
         });
     }
 
     private void rebuildTree() {
+        CardElement selected = getSelectedElement();
         if (elementTreeView.getRoot() == null) {
             TreeItem<CardElement> root = new TreeItem<>(new ContainerElement("Root"));
             elementTreeView.setRoot(root);
@@ -233,6 +353,9 @@ public class CardMakerController {
         }
         
         refreshTreeItems(elementTreeView.getRoot(), currentTemplate.getElements());
+        if (selected != null) {
+            selectElement(selected);
+        }
     }
 
     private void refreshTreeItems(TreeItem<CardElement> parentItem, ObservableList<CardElement> elements) {
@@ -246,26 +369,26 @@ public class CardMakerController {
 
     private TreeItem<CardElement> createTreeItemRecursive(CardElement el) {
         TreeItem<CardElement> item = new TreeItem<>(el);
-        item.setExpanded(true);
-        if (el instanceof ContainerElement ce) {
+        item.setExpanded(expandedElements.contains(el) || (el instanceof ParentCardElement && !expandedElements.isEmpty() == false));
+        // If expandedElements is empty (first time or reset), default to expanded
+        if (expandedElements.isEmpty()) {
+            item.setExpanded(true);
+        }
+        
+        if (el instanceof ParentCardElement pe) {
             // Listen for children changes to refresh this branch
-            ce.getChildren().removeListener(nestedListener); // avoid duplicates
-            ce.getChildren().addListener(nestedListener);
+            pe.getChildren().removeListener(nestedListener); // avoid duplicates
+            pe.getChildren().addListener(nestedListener);
             
-            for (CardElement child : ce.getChildren()) {
+            for (CardElement child : pe.getChildren()) {
                 item.getChildren().add(createTreeItemRecursive(child));
             }
         }
         return item;
     }
 
-    private final ListChangeListener<CardElement> nestedListener = c -> {
-        rebuildTree();
-        renderTemplate();
-    };
-
     private void highlightOnCanvas(CardElement selectedEl) {
-        // First clear all effects
+        // First clear all effects and hide resize handles
         clearAllHighlights(cardCanvas);
 
         if (selectedEl == null || previewMode) return;
@@ -274,6 +397,19 @@ public class CardMakerController {
         Node found = findNodeForElement(cardCanvas, selectedEl);
         if (found != null) {
             found.setEffect(new DropShadow(10, Color.BLUE));
+            
+            // Show resize handle if it's a container
+            if (found instanceof Pane pane) {
+                Node handle = pane.lookup(".resize-handle");
+                if (handle != null) {
+                    handle.setVisible(true);
+                    handle.toFront();
+                }
+            } else if (found.getParent() instanceof Pane parentPane) {
+                // If it's a child of a layout pane (HBox/VBox/FlowPane), 
+                // we might want to highlight the parent if it's a ContainerElement?
+                // But the user selected the child.
+            }
         }
     }
 
@@ -281,6 +417,10 @@ public class CardMakerController {
         for (Node node : pane.getChildren()) {
             node.setEffect(null);
             if (node instanceof Pane childPane) {
+                Node handle = childPane.lookup(".resize-handle");
+                if (handle != null) {
+                    handle.setVisible(false);
+                }
                 clearAllHighlights(childPane);
             }
         }
@@ -307,6 +447,8 @@ public class CardMakerController {
         cardCanvas.setMinHeight(height);
         cardCanvas.setMaxHeight(height);
         
+        updateSizeLabel();
+        
         if (!showClippedContent) {
             javafx.scene.shape.Rectangle clip = new javafx.scene.shape.Rectangle(width, height);
             cardCanvas.setClip(clip);
@@ -320,51 +462,160 @@ public class CardMakerController {
         Map<String, String> currentRecord = (currentRecordIndex >= 0 && currentRecordIndex < csvData.size()) 
                 ? csvData.get(currentRecordIndex) : null;
 
-        renderElements(currentTemplate.getElements(), cardCanvas, currentRecord, null, ContainerElement.LayoutType.POSITIONAL);
+        renderElements(currentTemplate.getElements(), cardCanvas, currentRecord, null, ContainerElement.LayoutType.POSITIONAL, ContainerElement.Alignment.LEFT, false);
         highlightOnCanvas(getSelectedElement());
     }
 
-    private void renderElements(ObservableList<CardElement> elements, Pane targetPane, Map<String, String> currentRecord, FontElement inheritedFont, ContainerElement.LayoutType containerLayout) {
+    public void renderElementsExternal(ObservableList<CardElement> elements, Pane targetPane, Map<String, String> currentRecord, boolean forFinalDesign) {
+        renderElements(elements, targetPane, currentRecord, null, ContainerElement.LayoutType.POSITIONAL, ContainerElement.Alignment.LEFT, forFinalDesign);
+    }
+
+    private void renderElements(ObservableList<CardElement> elements, Pane targetPane, Map<String, String> currentRecord, FontElement inheritedFont, ContainerElement.LayoutType containerLayout, ContainerElement.Alignment containerAlignment, boolean forFinalDesign) {
         FontElement currentFont = inheritedFont;
         for (CardElement el : elements) {
+            if (el instanceof ConditionElement ce) {
+                if (dataMerger.evaluateCondition(ce.getCondition(), currentRecord)) {
+                    renderElements(ce.getChildren(), targetPane, currentRecord, currentFont, containerLayout, containerAlignment, forFinalDesign);
+                }
+                continue;
+            }
             if (el instanceof FontElement fe) {
                 currentFont = fe;
                 continue;
             }
-            Node node = createNodeForElement(el, currentRecord, currentFont, containerLayout);
+
+            if (el instanceof IconElement ice && containerLayout != ContainerElement.LayoutType.POSITIONAL) {
+                // Special handling for IconElement in layout containers: render individual icons as separate nodes
+                List<Node> iconNodes = createIconNodes(ice, currentRecord, containerAlignment);
+                for (Node node : iconNodes) {
+                    targetPane.getChildren().add(node);
+                    if (!forFinalDesign) {
+                        makeDraggable(node, ice);
+                    }
+                    node.getProperties().put("cardElement", ice);
+                }
+                continue;
+            }
+
+            Node node = createNodeForElement(el, currentRecord, currentFont, containerLayout, containerAlignment, forFinalDesign);
             if (node != null) {
                 targetPane.getChildren().add(node);
-                if (el instanceof ContainerElement ce && node instanceof Pane childPane) {
-                    renderElements(ce.getChildren(), childPane, currentRecord, currentFont, ce.getLayoutType());
+                if (el instanceof ParentCardElement pe && node instanceof Pane childPane) {
+                    ContainerElement.LayoutType childLayout = ContainerElement.LayoutType.POSITIONAL;
+                    ContainerElement.Alignment childAlign = ContainerElement.Alignment.LEFT;
+                    
+                    if (pe instanceof ContainerElement ce) {
+                        childLayout = ce.getLayoutType();
+                        childAlign = ce.getAlignment();
+                    }
+                    
+                    renderElements(pe.getChildren(), childPane, currentRecord, currentFont, childLayout, childAlign, forFinalDesign);
+                }
+                if (node instanceof Pane pane) {
+                    ensureResizeHandleOnTop(pane);
                 }
             }
         }
     }
 
-    private Node createNodeForElement(CardElement el, Map<String, String> currentRecord, FontElement fontConfig, ContainerElement.LayoutType parentLayout) {
+    private List<Node> createIconNodes(IconElement ice, Map<String, String> currentRecord, ContainerElement.Alignment parentAlignment) {
+        List<Node> nodes = new ArrayList<>();
+        String val = (currentRecord != null) ? dataMerger.merge(ice.getValue(), currentRecord) : ice.getValue();
+        if (val != null) {
+            Map<String, String> iconMap = currentTemplate.getIconLibrary().getMappings().get(ice.getMappingName());
+            if (iconMap != null) {
+                List<String> sortedKeys = iconMap.keySet().stream()
+                        .filter(k -> !k.isEmpty())
+                        .sorted((a, b) -> Integer.compare(b.length(), a.length()))
+                        .toList();
+
+                String remaining = val;
+                while (!remaining.isEmpty()) {
+                    boolean found = false;
+                    for (String key : sortedKeys) {
+                        if (remaining.startsWith(key)) {
+                            String iconPath = iconMap.get(key);
+                            if (iconPath != null && !iconPath.isEmpty()) {
+                                ImageView iv = new ImageView();
+                                iv.setImage(loadSafeImage(iconPath));
+                                if (iv.getImage() != null) {
+                                    iv.fitWidthProperty().bind(ice.iconWidthProperty());
+                                    iv.fitHeightProperty().bind(ice.iconHeightProperty());
+                                    iv.setPreserveRatio(true);
+                                    iv.setPickOnBounds(true);
+                                    nodes.add(iv);
+                                }
+                            }
+                            remaining = remaining.substring(key.length());
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found) remaining = remaining.substring(1);
+                }
+            }
+        }
+        return nodes;
+    }
+
+    private Node createNodeForElement(CardElement el, Map<String, String> currentRecord, FontElement fontConfig, ContainerElement.LayoutType parentLayout, ContainerElement.Alignment parentAlignment, boolean forFinalDesign) {
         Node node;
         boolean isPositional = parentLayout == null || parentLayout == ContainerElement.LayoutType.POSITIONAL;
 
         if (el instanceof TextElement te) {
-            String displayText = (currentRecord != null) ? dataMerger.merge(te.getText(), currentRecord) : te.getText();
-            Text text = new Text(displayText);
+            Text text = new Text();
+            text.textProperty().bind(javafx.beans.binding.Bindings.createStringBinding(
+                () -> (currentRecord != null) ? dataMerger.merge(te.getText(), currentRecord) : te.getText(),
+                te.textProperty()
+            ));
             text.getStyleClass().add("text-element");
             
-            if (fontConfig != null) {
-                text.setFont(Font.font(fontConfig.getFontFamily(), fontConfig.getFontWeight(), fontConfig.getFontPosture(), fontConfig.getFontSize()));
-                try {
-                    text.setFill(Color.web(fontConfig.getColor()));
-                } catch (Exception e) {
-                    text.setFill(Color.BLACK);
-                }
-            } else {
-                text.setFont(Font.font(te.getFontSize()));
-                try {
-                    text.setFill(Color.web(te.getColor()));
-                } catch (Exception e) {
-                    text.setFill(Color.BLACK);
+            // Resolve font config
+            FontElement resolvedFont = fontConfig;
+            if (te.getFontConfigName() != null && !te.getFontConfigName().equals("Default")) {
+                FontElement libFont = currentTemplate.getFontLibrary().getFonts().get(te.getFontConfigName());
+                if (libFont != null) {
+                    resolvedFont = libFont;
                 }
             }
+            final FontElement effectiveFont = resolvedFont;
+
+            if (effectiveFont != null) {
+                text.fontProperty().bind(javafx.beans.binding.Bindings.createObjectBinding(
+                    () -> Font.font(effectiveFont.getFontFamily(), effectiveFont.getFontWeight(), effectiveFont.getFontPosture(), effectiveFont.getFontSize()),
+                    effectiveFont.fontFamilyProperty(), effectiveFont.fontWeightProperty(), effectiveFont.fontPostureProperty(), effectiveFont.fontSizeProperty()
+                ));
+                text.fillProperty().bind(javafx.beans.binding.Bindings.createObjectBinding(
+                    () -> {
+                        try { return Color.web(effectiveFont.getColor()); } catch (Exception e) { return Color.BLACK; }
+                    }, effectiveFont.colorProperty()
+                ));
+                text.rotateProperty().bind(effectiveFont.angleProperty());
+                text.strokeWidthProperty().bind(effectiveFont.outlineWidthProperty());
+                text.strokeProperty().bind(javafx.beans.binding.Bindings.createObjectBinding(
+                    () -> {
+                        try { return Color.web(effectiveFont.getOutlineColor()); } catch (Exception e) { return Color.TRANSPARENT; }
+                    }, effectiveFont.outlineColorProperty()
+                ));
+            } else {
+                text.fontProperty().bind(javafx.beans.binding.Bindings.createObjectBinding(
+                    () -> Font.font(te.getFontSize()), te.fontSizeProperty()
+                ));
+                text.fillProperty().bind(javafx.beans.binding.Bindings.createObjectBinding(
+                    () -> {
+                        try { return Color.web(te.getColor()); } catch (Exception e) { return Color.BLACK; }
+                    }, te.colorProperty()
+                ));
+                text.rotateProperty().bind(te.angleProperty());
+                text.strokeWidthProperty().bind(te.outlineWidthProperty());
+                text.strokeProperty().bind(javafx.beans.binding.Bindings.createObjectBinding(
+                    () -> {
+                        try { return Color.web(te.getOutlineColor()); } catch (Exception e) { return Color.TRANSPARENT; }
+                    }, te.outlineColorProperty()
+                ));
+            }
+            text.wrappingWidthProperty().bind(te.wrappingWidthProperty());
+            text.setTextAlignment(mapAlignmentToTextAlignment(parentAlignment));
             
             node = text;
             if (isPositional) {
@@ -372,19 +623,21 @@ public class CardMakerController {
                 text.layoutYProperty().bind(te.yProperty().add(te.fontSizeProperty())); // Text layout Y is baseline
             }
         } else if (el instanceof ImageElement ie) {
-            String path = (currentRecord != null) ? dataMerger.merge(ie.getImagePath(), currentRecord) : ie.getImagePath();
             ImageView imageView = new ImageView();
             imageView.getStyleClass().add("image-element");
-            if (path != null && !path.isEmpty()) {
-                try {
-                    File file = new File(path);
-                    if (file.exists()) {
-                        imageView.setImage(new Image(file.toURI().toString()));
-                    }
-                } catch (Exception e) {
-                    // Ignore image load error
+            
+            // Listen to path changes and update image
+            javafx.beans.value.ChangeListener<String> pathListener = (obs, old, newVal) -> {
+                String p = (currentRecord != null) ? dataMerger.merge(newVal, currentRecord) : newVal;
+                if (p != null && !p.isEmpty()) {
+                    imageView.setImage(loadSafeImage(p));
+                } else {
+                    imageView.setImage(null);
                 }
-            }
+            };
+            ie.imagePathProperty().addListener(pathListener);
+            pathListener.changed(null, null, ie.getImagePath());
+
             imageView.fitWidthProperty().bind(ie.widthProperty());
             imageView.fitHeightProperty().bind(ie.heightProperty());
             imageView.preserveRatioProperty().bind(ie.lockAspectRatioProperty());
@@ -400,18 +653,22 @@ public class CardMakerController {
                     VBox vbox = new VBox();
                     vbox.setAlignment(mapAlignmentToPos(ce.getAlignment(), true));
                     ce.alignmentProperty().addListener((obs, old, newVal) -> vbox.setAlignment(mapAlignmentToPos(newVal, true)));
+                    vbox.spacingProperty().bind(ce.spacingProperty());
                     pane = vbox;
                     break;
                 case HORIZONTAL:
                     HBox hbox = new HBox();
                     hbox.setAlignment(mapAlignmentToPos(ce.getAlignment(), false));
                     ce.alignmentProperty().addListener((obs, old, newVal) -> hbox.setAlignment(mapAlignmentToPos(newVal, false)));
+                    hbox.spacingProperty().bind(ce.spacingProperty());
                     pane = hbox;
                     break;
                 case FLOW:
                     FlowPane flowPane = new FlowPane();
                     flowPane.setAlignment(mapAlignmentToPos(ce.getAlignment(), false));
                     ce.alignmentProperty().addListener((obs, old, newVal) -> flowPane.setAlignment(mapAlignmentToPos(newVal, false)));
+                    flowPane.hgapProperty().bind(ce.spacingProperty());
+                    flowPane.vgapProperty().bind(ce.spacingProperty());
                     pane = flowPane;
                     break;
                 case POSITIONAL:
@@ -437,25 +694,78 @@ public class CardMakerController {
             
             pane.setPickOnBounds(true); // allow dragging by clicking anywhere inside the bounds, even if transparent
             
-            updatePaneStyle(pane, ce.getBackgroundColor(), ce.getAlpha());
-            ce.backgroundColorProperty().addListener((obs, old, newVal) -> updatePaneStyle(pane, newVal, ce.getAlpha()));
-            ce.alphaProperty().addListener((obs, old, newVal) -> updatePaneStyle(pane, ce.getBackgroundColor(), newVal.doubleValue()));
+            updatePaneStyle(pane, ce.getBackgroundColor(), ce.getAlpha(), forFinalDesign);
+            ce.backgroundColorProperty().addListener((obs, old, newVal) -> updatePaneStyle(pane, newVal, ce.getAlpha(), forFinalDesign));
+            ce.alphaProperty().addListener((obs, old, newVal) -> updatePaneStyle(pane, ce.getBackgroundColor(), newVal.doubleValue(), forFinalDesign));
+
+            if (!forFinalDesign) {
+                makeResizable(pane, ce);
+            }
 
             node = pane;
             if (isPositional) {
                 pane.layoutXProperty().bind(ce.xProperty());
                 pane.layoutYProperty().bind(ce.yProperty());
             }
+        } else if (el instanceof IconElement ice) {
+            // This is only used for POSITIONAL layout now
+            FlowPane flowPane = new FlowPane();
+            flowPane.getStyleClass().add("icon-element");
+            flowPane.setAlignment(mapAlignmentToPos(parentAlignment, false));
+            flowPane.setPickOnBounds(false); // only pick icons, not the empty area of the flow pane
+            flowPane.setMaxWidth(Region.USE_PREF_SIZE);
+            flowPane.setMaxHeight(Region.USE_PREF_SIZE);
+            
+            // Listen to value changes and rebuild children
+            javafx.beans.value.ChangeListener<Object> rebuildIcons = (obs, old, newVal) -> {
+                flowPane.getChildren().clear();
+                List<Node> iconNodes = createIconNodes(ice, currentRecord, parentAlignment);
+                flowPane.getChildren().addAll(iconNodes);
+            };
+            ice.valueProperty().addListener(rebuildIcons);
+            ice.mappingNameProperty().addListener(rebuildIcons);
+            rebuildIcons.changed(null, null, null);
+
+            node = flowPane;
+            if (isPositional) {
+                flowPane.layoutXProperty().bind(ice.xProperty());
+                flowPane.layoutYProperty().bind(ice.yProperty());
+            }
         } else {
             return null;
         }
 
-        makeDraggable(node, el);
+        if (!forFinalDesign) {
+            makeDraggable(node, el);
+        }
         node.getProperties().put("cardElement", el);
         return node;
     }
 
+    private Image loadSafeImage(String path) {
+        if (path == null || path.isEmpty()) return null;
+        try {
+            File file = new File(path);
+            if (!file.exists()) return null;
+
+            if (path.toLowerCase().endsWith(".svg")) {
+                try {
+                    BufferedImage bufferedImage = ImageIO.read(file);
+                    if (bufferedImage != null) {
+                        return SwingFXUtils.toFXImage(bufferedImage, null);
+                    }
+                } catch (Exception e) {
+                    // fall back to default loader
+                }
+            }
+            return new Image(file.toURI().toString());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     private javafx.geometry.Pos mapAlignmentToPos(ContainerElement.Alignment alignment, boolean vertical) {
+        if (alignment == null) alignment = ContainerElement.Alignment.LEFT;
         if (vertical) {
             return switch (alignment) {
                 case LEFT -> javafx.geometry.Pos.TOP_LEFT;
@@ -471,7 +781,16 @@ public class CardMakerController {
         }
     }
 
-    private void updatePaneStyle(Pane pane, String color, double alpha) {
+    private javafx.scene.text.TextAlignment mapAlignmentToTextAlignment(ContainerElement.Alignment alignment) {
+        if (alignment == null) return javafx.scene.text.TextAlignment.LEFT;
+        return switch (alignment) {
+            case LEFT -> javafx.scene.text.TextAlignment.LEFT;
+            case CENTER -> javafx.scene.text.TextAlignment.CENTER;
+            case RIGHT -> javafx.scene.text.TextAlignment.RIGHT;
+        };
+    }
+
+    private void updatePaneStyle(Pane pane, String color, double alpha, boolean forFinalDesign) {
         try {
             Color c = Color.web(color);
             String alphaColor = String.format("rgba(%d, %d, %d, %.2f)", 
@@ -482,7 +801,7 @@ public class CardMakerController {
             
             // Ensure container is visible with a subtle dashed border even if background is transparent
             StringBuilder style = new StringBuilder("-fx-background-color: " + alphaColor + "; ");
-            if (!previewMode) {
+            if (!previewMode && !forFinalDesign) {
                 style.append("-fx-border-color: #888888; "); // Stronger border color
                 style.append("-fx-border-style: dashed; ");
                 style.append("-fx-border-width: 1; ");
@@ -491,6 +810,99 @@ public class CardMakerController {
         } catch (Exception e) {
             // Ignore styling errors
         }
+    }
+
+    private void ensureResizeHandleOnTop(Pane pane) {
+        Node handle = pane.lookup(".resize-handle");
+        if (handle != null) {
+            handle.toFront();
+        }
+    }
+
+    private void makeResizable(Pane pane, ContainerElement ce) {
+        javafx.scene.shape.Rectangle handle = new javafx.scene.shape.Rectangle(10, 10, Color.BLUE);
+        handle.getStyleClass().add("resize-handle");
+        handle.setVisible(false); // Only show when selected
+        handle.setCursor(javafx.scene.Cursor.SE_RESIZE);
+        handle.setManaged(false); // Do not let layout managers (VBox, HBox, etc.) position this
+
+        // Position the handle at the bottom right
+        handle.layoutXProperty().bind(ce.widthProperty().subtract(10));
+        handle.layoutYProperty().bind(ce.heightProperty().subtract(10));
+        handle.toFront();
+
+        final Delta dragDelta = new Delta();
+        handle.setOnMousePressed(mouseEvent -> {
+            dragDelta.x = mouseEvent.getSceneX();
+            dragDelta.y = mouseEvent.getSceneY();
+            mouseEvent.consume();
+        });
+
+        handle.setOnMouseDragged(mouseEvent -> {
+            double deltaX = mouseEvent.getSceneX() - dragDelta.x;
+            double deltaY = mouseEvent.getSceneY() - dragDelta.y;
+
+            // Apply scaling if parent is scaled
+            if (handle.getParent() != null) {
+                deltaX /= handle.getParent().getLocalToSceneTransform().getMxx();
+                deltaY /= handle.getParent().getLocalToSceneTransform().getMyy();
+            }
+            
+            double newWidth = ce.getWidth() + deltaX;
+            double newHeight = ce.getHeight() + deltaY;
+
+            // Constrain new dimensions
+            newWidth = Math.max(10, newWidth);
+            newHeight = Math.max(10, newHeight);
+
+            // Prevent extending outside card bounds
+            double cardWidth = currentTemplate.getDimension().getWidthPx();
+            double cardHeight = currentTemplate.getDimension().getHeightPx();
+            
+            // For now, we only constrain root-level elements or elements with absolute positions.
+            // If they are in a container, their (x,y) is relative to the container.
+            // To be truly safe, we'd need to calculate their absolute position on the card.
+            // But let's start with a simple constraint: x + width <= cardWidth, y + height <= cardHeight
+            // assuming x and y are relative to the card.
+            
+            if (ce.getX() + newWidth > cardWidth) {
+                newWidth = cardWidth - ce.getX();
+            }
+            if (ce.getY() + newHeight > cardHeight) {
+                newHeight = cardHeight - ce.getY();
+            }
+
+            if (ce.isLockAspectRatio()) {
+                double ratio = ce.getWidth() / ce.getHeight();
+                if (Math.abs(deltaX) > Math.abs(deltaY)) {
+                    newHeight = newWidth / ratio;
+                    // Re-check bounds after aspect ratio adjustment
+                    if (ce.getY() + newHeight > cardHeight) {
+                        newHeight = cardHeight - ce.getY();
+                        newWidth = newHeight * ratio;
+                    }
+                } else {
+                    newWidth = newHeight * ratio;
+                    // Re-check bounds after aspect ratio adjustment
+                    if (ce.getX() + newWidth > cardWidth) {
+                        newWidth = cardWidth - ce.getX();
+                        newHeight = newWidth / ratio;
+                    }
+                }
+            }
+
+            ce.setWidth(newWidth);
+            ce.setHeight(newHeight);
+
+            dragDelta.x = mouseEvent.getSceneX();
+            dragDelta.y = mouseEvent.getSceneY();
+            
+            mouseEvent.consume();
+        });
+
+        handle.setOnMouseClicked(javafx.scene.input.MouseEvent::consume);
+
+        pane.getChildren().add(handle);
     }
 
     private void makeDraggable(Node node, CardElement el) {
@@ -509,8 +921,41 @@ public class CardMakerController {
             mouseEvent.consume();
         });
         node.setOnMouseDragged(mouseEvent -> {
-            el.setX(mouseEvent.getSceneX() + dragDelta.x);
-            el.setY(mouseEvent.getSceneY() + dragDelta.y);
+            double newX = mouseEvent.getSceneX() + dragDelta.x;
+            double newY = mouseEvent.getSceneY() + dragDelta.y;
+            
+            double cardWidth = currentTemplate.getDimension().getWidthPx();
+            double cardHeight = currentTemplate.getDimension().getHeightPx();
+            
+            double width = 0;
+            double height = 0;
+            if (el instanceof ContainerElement ce) {
+                width = ce.getWidth();
+                height = ce.getHeight();
+            } else if (el instanceof ImageElement ie) {
+                width = ie.getWidth();
+                height = ie.getHeight();
+            } else if (el instanceof TextElement te) {
+                // For text elements, use height based on font size (approximate)
+                height = te.getFontSize();
+                // Width is tricky for text, we'll assume 20 as a minimal safety margin
+                width = 20; 
+            }
+            
+            // Constrain X
+            newX = Math.max(0, newX);
+            if (newX + width > cardWidth) {
+                newX = Math.max(0, cardWidth - width);
+            }
+            
+            // Constrain Y
+            newY = Math.max(0, newY);
+            if (newY + height > cardHeight) {
+                newY = Math.max(0, cardHeight - height);
+            }
+
+            el.setX(newX);
+            el.setY(newY);
             mouseEvent.consume();
         });
     }
@@ -598,26 +1043,58 @@ public class CardMakerController {
 
         TextField nameField = new TextField(el.getName());
         nameField.textProperty().bindBidirectional(el.nameProperty());
+        
         propertiesPane.getChildren().addAll(new Label("Name"), nameField);
+
+        if (el instanceof ConditionElement ce) {
+            TextField conditionField = new TextField(ce.getCondition());
+            conditionField.textProperty().bindBidirectional(ce.conditionProperty());
+            addManagedListener(ce.conditionProperty(), (obs, old, newVal) -> renderTemplate());
+            propertiesPane.getChildren().addAll(new Label("Condition"), conditionField);
+        }
 
         if (el instanceof TextElement te) {
             TextArea textArea = new TextArea(te.getText());
             textArea.setPrefRowCount(3);
             textArea.textProperty().bindBidirectional(te.textProperty());
             addManagedListener(te.textProperty(), (obs, old, newVal) -> renderTemplate());
-            
+        
+            ComboBox<String> fontConfigCombo = new ComboBox<>();
+            fontConfigCombo.getItems().add("Default");
+            fontConfigCombo.getItems().addAll(currentTemplate.getFontLibrary().getFonts().keySet());
+            fontConfigCombo.setValue(te.getFontConfigName());
+            te.fontConfigNameProperty().bind(fontConfigCombo.valueProperty());
+            addManagedListener(te.fontConfigNameProperty(), (obs, old, newVal) -> renderTemplate());
+
             HBox sizeBox = createSliderWithNumericField(te.fontSizeProperty(), 8, 72);
             addManagedListener(te.fontSizeProperty(), (obs, old, newVal) -> renderTemplate());
-
             ColorPicker colorPicker = new ColorPicker(Color.web(te.getColor()));
             colorPicker.setOnAction(e -> {
                 te.setColor(toHexString(colorPicker.getValue()));
                 renderTemplate();
             });
 
+            HBox angleBox = createSliderWithNumericField(te.angleProperty(), -360, 360);
+            addManagedListener(te.angleProperty(), (obs, old, newVal) -> renderTemplate());
+            HBox outlineWidthBox = createSliderWithNumericField(te.outlineWidthProperty(), 0, 20);
+            addManagedListener(te.outlineWidthProperty(), (obs, old, newVal) -> renderTemplate());
+            ColorPicker outlineColorPicker = new ColorPicker(Color.web(te.getOutlineColor()));
+            outlineColorPicker.setOnAction(e -> {
+                te.setOutlineColor(toHexString(outlineColorPicker.getValue()));
+                renderTemplate();
+            });
+
+            HBox wrappingWidthBox = createSliderWithNumericField(te.wrappingWidthProperty(), 0, 1000);
+            addManagedListener(te.wrappingWidthProperty(), (obs, old, newVal) -> renderTemplate());
+            
             propertiesPane.getChildren().addAll(new Label("Text content (use {{header}} for merge)"), textArea, 
-                                            new Label("Font Size"), sizeBox,
-                                            new Label("Color"), colorPicker);
+                                            new Label("Font Configuration"), fontConfigCombo,
+                                            new Label("Font Size (if no config)"), sizeBox,
+                                            new Label("Color (if no config)"), colorPicker,
+                                            new Label("Angle (if no config)"), angleBox,
+                                            new Label("Outline Width (if no config)"), outlineWidthBox,
+                                            new Label("Outline Color (if no config)"), outlineColorPicker,
+                                            new Label("Wrapping Width (0 for none)"), wrappingWidthBox);
         } else if (el instanceof ImageElement ie) {
             TextField pathField = new TextField(ie.getImagePath());
             pathField.textProperty().bindBidirectional(ie.imagePathProperty());
@@ -629,7 +1106,9 @@ public class CardMakerController {
                             Image img = new Image(file.toURI().toString());
                             if (img.getWidth() > 0 && img.getHeight() > 0) {
                                 double ratio = img.getHeight() / img.getWidth();
+                                isUpdatingOtherAxis = true;
                                 ie.setHeight(ie.getWidth() * ratio);
+                                isUpdatingOtherAxis = false;
                             }
                         }
                     } catch (Exception e) {
@@ -642,12 +1121,16 @@ public class CardMakerController {
             Button browseBtn = new Button("Browse...");
             browseBtn.setOnAction(e -> {
                 FileChooser fileChooser = new FileChooser();
+                if (lastOpenedDirectory != null && lastOpenedDirectory.exists()) {
+                    fileChooser.setInitialDirectory(lastOpenedDirectory);
+                }
                 fileChooser.getExtensionFilters().addAll(
                     new FileChooser.ExtensionFilter("Image Files", "*.png", "*.jpg", "*.jpeg", "*.gif", "*.bmp", "*.svg"),
                     new FileChooser.ExtensionFilter("All Files", "*.*")
                 );
                 File file = fileChooser.showOpenDialog(propertiesPane.getScene().getWindow());
                 if (file != null) {
+                    lastOpenedDirectory = file.getParentFile();
                     pathField.setText(file.getAbsolutePath());
                 }
             });
@@ -661,7 +1144,6 @@ public class CardMakerController {
                     ie.setHeight(newVal.doubleValue() * ratio);
                     isUpdatingOtherAxis = false;
                 }
-                renderTemplate();
             });
 
             HBox heightBox = createSliderWithNumericField(ie.heightProperty(), 10, 500);
@@ -673,7 +1155,6 @@ public class CardMakerController {
                     ie.setWidth(newVal.doubleValue() * ratio);
                     isUpdatingOtherAxis = false;
                 }
-                renderTemplate();
             });
 
             CheckBox lockAspectBox = new CheckBox("Lock Aspect Ratio");
@@ -692,7 +1173,6 @@ public class CardMakerController {
                     ce.setHeight(newVal.doubleValue() * ratio);
                     isUpdatingOtherAxis = false;
                 }
-                renderTemplate();
             });
 
             HBox heightBox = createSliderWithNumericField(ce.heightProperty(), 10, 500);
@@ -703,15 +1183,12 @@ public class CardMakerController {
                     ce.setWidth(newVal.doubleValue() * ratio);
                     isUpdatingOtherAxis = false;
                 }
-                renderTemplate();
             });
 
             CheckBox lockAspectBox = new CheckBox("Lock Aspect Ratio");
             lockAspectBox.selectedProperty().bindBidirectional(ce.lockAspectRatioProperty());
 
             HBox alphaBox = createSliderWithNumericField(ce.alphaProperty(), 0.0, 1.0);
-            addManagedListener(ce.alphaProperty(), (obs, old, newVal) -> renderTemplate());
-
             ColorPicker colorPicker = new ColorPicker(Color.TRANSPARENT);
             try {
                 colorPicker.setValue(Color.web(ce.getBackgroundColor()));
@@ -720,7 +1197,6 @@ public class CardMakerController {
             }
             colorPicker.setOnAction(e -> {
                 ce.setBackgroundColor(toHexString(colorPicker.getValue()));
-                renderTemplate();
             });
 
             ComboBox<ContainerElement.LayoutType> layoutBox = new ComboBox<>(javafx.collections.FXCollections.observableArrayList(ContainerElement.LayoutType.values()));
@@ -750,6 +1226,9 @@ public class CardMakerController {
             alignBox.valueProperty().bindBidirectional(ce.alignmentProperty());
             addManagedListener(ce.alignmentProperty(), (obs, old, newVal) -> renderTemplate());
 
+            HBox spacingBox = createSliderWithNumericField(ce.spacingProperty(), 0, 100);
+            addManagedListener(ce.spacingProperty(), (obs, old, newVal) -> renderTemplate());
+
             propertiesPane.getChildren().addAll(
                 new Label("Width"), widthBox,
                 new Label("Height"), heightBox,
@@ -757,7 +1236,25 @@ public class CardMakerController {
                 new Label("Background Alpha"), alphaBox,
                 new Label("Background Color"), colorPicker,
                 new Label("Layout Type"), layoutBox,
-                new Label("Alignment"), alignBox
+                new Label("Alignment"), alignBox,
+                new Label("Spacing"), spacingBox
+            );
+        } else if (el instanceof IconElement ice) {
+            TextField valueField = new TextField(ice.getValue());
+            valueField.textProperty().bindBidirectional(ice.valueProperty());
+            
+            HBox iconWidthBox = createSliderWithNumericField(ice.iconWidthProperty(), 8, 200);
+            HBox iconHeightBox = createSliderWithNumericField(ice.iconHeightProperty(), 8, 200);
+
+            ComboBox<String> mappingBox = new ComboBox<>();
+            mappingBox.getItems().addAll(currentTemplate.getIconLibrary().getMappings().keySet());
+            mappingBox.valueProperty().bindBidirectional(ice.mappingNameProperty());
+
+            propertiesPane.getChildren().addAll(
+                new Label("Value (supports {{header}})"), valueField,
+                new Label("Icon Width"), iconWidthBox,
+                new Label("Icon Height"), iconHeightBox,
+                new Label("Icon Mapping"), mappingBox
             );
         } else if (el instanceof FontElement fe) {
             ComboBox<String> familyBox = new ComboBox<>(javafx.collections.FXCollections.observableArrayList(Font.getFamilies()));
@@ -780,6 +1277,19 @@ public class CardMakerController {
             ColorPicker colorPicker = new ColorPicker(Color.web(fe.getColor()));
             colorPicker.setOnAction(e -> {
                 fe.setColor(toHexString(colorPicker.getValue()));
+                renderTemplate();
+            });
+
+            HBox angleBox = createSliderWithNumericField(fe.angleProperty(), -360, 360);
+            addManagedListener(fe.angleProperty(), (obs, old, newVal) -> renderTemplate());
+
+            HBox outlineWidthBox = createSliderWithNumericField(fe.outlineWidthProperty(), 0, 20);
+            addManagedListener(fe.outlineWidthProperty(), (obs, old, newVal) -> renderTemplate());
+
+            ColorPicker outlineColorPicker = new ColorPicker(Color.web(fe.getOutlineColor()));
+            outlineColorPicker.setOnAction(e -> {
+                fe.setOutlineColor(toHexString(outlineColorPicker.getValue()));
+                renderTemplate();
             });
 
             propertiesPane.getChildren().addAll(
@@ -787,7 +1297,10 @@ public class CardMakerController {
                 new Label("Font Size"), sizeBox,
                 new Label("Font Weight"), weightBox,
                 new Label("Font Posture"), postureBox,
-                new Label("Color"), colorPicker
+                new Label("Color"), colorPicker,
+                new Label("Angle"), angleBox,
+                new Label("Outline Width"), outlineWidthBox,
+                new Label("Outline Color"), outlineColorPicker
             );
         }
     }
@@ -798,6 +1311,54 @@ public class CardMakerController {
                 (int)(color.getRed() * 255),
                 (int)(color.getGreen() * 255),
                 (int)(color.getBlue() * 255));
+    }
+
+    private void addMappingRow(Map<String, String> iconMap, String charStr, VBox container) {
+        HBox row = new HBox(10);
+        row.setAlignment(Pos.CENTER_LEFT);
+        row.setPadding(new Insets(2, 0, 2, 0));
+        
+        Label label = new Label(charStr + ":");
+        label.setMinWidth(45);
+        label.setStyle("-fx-font-family: monospace; -fx-font-weight: bold;");
+        
+        TextField pathField = new TextField(iconMap.getOrDefault(charStr, ""));
+        pathField.setPromptText("Select image path...");
+        HBox.setHgrow(pathField, Priority.ALWAYS);
+        pathField.textProperty().addListener((obs, old, newVal) -> {
+            iconMap.put(charStr, newVal == null ? "" : newVal);
+            renderTemplate();
+        });
+
+        Button browseBtn = new Button("...");
+        browseBtn.setTooltip(new Tooltip("Browse for image"));
+        browseBtn.setOnAction(e -> {
+            FileChooser fileChooser = new FileChooser();
+            if (lastOpenedDirectory != null && lastOpenedDirectory.exists()) {
+                fileChooser.setInitialDirectory(lastOpenedDirectory);
+            }
+            fileChooser.getExtensionFilters().addAll(
+                    new FileChooser.ExtensionFilter("Image Files", "*.png", "*.jpg", "*.jpeg", "*.gif", "*.bmp", "*.svg"),
+                    new FileChooser.ExtensionFilter("All Files", "*.*")
+            );
+            File file = fileChooser.showOpenDialog(propertiesPane.getScene().getWindow());
+            if (file != null) {
+                lastOpenedDirectory = file.getParentFile();
+                pathField.setText(file.getAbsolutePath());
+            }
+        });
+
+        Button removeBtn = new Button("X");
+        removeBtn.setTooltip(new Tooltip("Remove key"));
+        removeBtn.setStyle("-fx-text-fill: red;");
+        removeBtn.setOnAction(e -> {
+            iconMap.remove(charStr);
+            container.getChildren().remove(row);
+            renderTemplate();
+        });
+
+        row.getChildren().addAll(label, pathField, browseBtn, removeBtn);
+        container.getChildren().add(row);
     }
 
     @FXML
@@ -819,6 +1380,9 @@ public class CardMakerController {
     @FXML
     void handleLoadCsv(ActionEvent event) {
         FileChooser fileChooser = new FileChooser();
+        if (lastOpenedDirectory != null && lastOpenedDirectory.exists()) {
+            fileChooser.setInitialDirectory(lastOpenedDirectory);
+        }
         fileChooser.getExtensionFilters().addAll(
                 new FileChooser.ExtensionFilter("Data Files", "*.csv", "*.ods"),
                 new FileChooser.ExtensionFilter("CSV Files", "*.csv"),
@@ -826,6 +1390,7 @@ public class CardMakerController {
         );
         File file = fileChooser.showOpenDialog(propertiesPane.getScene().getWindow());
         if (file != null) {
+            lastOpenedDirectory = file.getParentFile();
             loadCsvFile(file);
         }
     }
@@ -874,6 +1439,250 @@ public class CardMakerController {
         addElement(newEl);
     }
 
+    @FXML
+    void handleAddIcon(ActionEvent event) {
+        addElement(new IconElement());
+    }
+
+    @FXML
+    void handleAddCondition(ActionEvent event) {
+        addElement(new ConditionElement());
+    }
+
+    @FXML
+    public void handleManageIconLibrary(ActionEvent event) {
+        Dialog<Void> dialog = new Dialog<>();
+        dialog.setTitle("Manage Icon Library");
+        dialog.setHeaderText("Create and manage named icon mappings for your deck.");
+        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.CLOSE);
+
+        VBox content = new VBox(15);
+        content.setPadding(new Insets(10));
+        content.setMinWidth(450);
+        content.setPrefHeight(650);
+
+        // Section: Select/Manage Mappings
+        VBox mappingSection = new VBox(8);
+        Label mappingLabel = new Label("Icon Mappings");
+        mappingLabel.setStyle("-fx-font-weight: bold;");
+        
+        ListView<String> mappingList = new ListView<>();
+        mappingList.getItems().addAll(currentTemplate.getIconLibrary().getMappings().keySet());
+        mappingList.setPrefHeight(120);
+
+        HBox mappingActions = new HBox(8);
+        mappingActions.setAlignment(Pos.CENTER_LEFT);
+        TextField newMapNameField = new TextField();
+        newMapNameField.setPromptText("New Mapping Name");
+        HBox.setHgrow(newMapNameField, Priority.ALWAYS);
+        Button addMapBtn = new Button("Add Mapping");
+        Button removeMapBtn = new Button("Remove Selected");
+        mappingActions.getChildren().addAll(newMapNameField, addMapBtn, removeMapBtn);
+        
+        mappingSection.getChildren().addAll(mappingLabel, mappingList, mappingActions);
+
+        // Section: Editor for selected mapping
+        VBox editorSection = new VBox(8);
+        VBox.setVgrow(editorSection, Priority.ALWAYS);
+        Label editorLabel = new Label("Mapping Editor");
+        editorLabel.setStyle("-fx-font-weight: bold;");
+        
+        VBox editorContainer = new VBox(10);
+        editorContainer.setPadding(new Insets(5));
+        ScrollPane editorScroll = new ScrollPane(editorContainer);
+        editorScroll.setFitToWidth(true);
+        VBox.setVgrow(editorScroll, Priority.ALWAYS);
+        editorScroll.setStyle("-fx-background-color:transparent;");
+
+        mappingList.getSelectionModel().selectedItemProperty().addListener((obs, old, newVal) -> {
+            editorContainer.getChildren().clear();
+            if (newVal != null) {
+                Map<String, String> iconMap = currentTemplate.getIconLibrary().getMappings().get(newVal);
+                if (iconMap != null) {
+                    HBox addKeyRow = new HBox(8);
+                    addKeyRow.setAlignment(Pos.CENTER_LEFT);
+                    TextField newKeyField = new TextField();
+                    newKeyField.setPromptText("New Key (e.g., F, FF, HP)");
+                    HBox.setHgrow(newKeyField, Priority.ALWAYS);
+                    Button addKeyBtn = new Button("Add Key");
+                    addKeyRow.getChildren().addAll(newKeyField, addKeyBtn);
+                    
+                    VBox rowsContainer = new VBox(8);
+                    
+                    addKeyBtn.setOnAction(ak -> {
+                        String key = newKeyField.getText().trim();
+                        if (!key.isEmpty() && !iconMap.containsKey(key)) {
+                            iconMap.put(key, "");
+                            addMappingRow(iconMap, key, rowsContainer);
+                            newKeyField.clear();
+                        }
+                    });
+
+                    iconMap.keySet().stream().sorted().forEach(key -> addMappingRow(iconMap, key, rowsContainer));
+                    
+                    editorContainer.getChildren().addAll(addKeyRow, new Separator(), rowsContainer);
+                }
+            } else {
+                editorContainer.getChildren().add(new Label("Select a mapping to edit its keys."));
+            }
+        });
+
+        addMapBtn.setOnAction(e -> {
+            String name = newMapNameField.getText().trim();
+            if (!name.isEmpty() && !currentTemplate.getIconLibrary().getMappings().containsKey(name)) {
+                currentTemplate.getIconLibrary().getMappings().put(name, new java.util.HashMap<>());
+                mappingList.getItems().add(name);
+                mappingList.getSelectionModel().select(name);
+                newMapNameField.clear();
+            }
+        });
+
+        removeMapBtn.setOnAction(e -> {
+            String selected = mappingList.getSelectionModel().getSelectedItem();
+            if (selected != null) {
+                currentTemplate.getIconLibrary().getMappings().remove(selected);
+                mappingList.getItems().remove(selected);
+                editorContainer.getChildren().clear();
+            }
+        });
+        
+        // Initial state
+        if (mappingList.getItems().isEmpty()) {
+            editorContainer.getChildren().add(new Label("No mappings defined. Add one above."));
+        } else {
+            mappingList.getSelectionModel().selectFirst();
+        }
+
+        editorSection.getChildren().addAll(new Separator(), editorLabel, editorScroll);
+        content.getChildren().addAll(mappingSection, editorSection);
+        dialog.getDialogPane().setContent(content);
+        dialog.showAndWait();
+        renderTemplate();
+    }
+
+    @FXML
+    public void handleManageFontLibrary(ActionEvent event) {
+        Dialog<Void> dialog = new Dialog<>();
+        dialog.setTitle("Manage Font Library");
+        dialog.setHeaderText("Create and manage named font configurations for your deck.");
+        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.CLOSE);
+
+        VBox content = new VBox(15);
+        content.setPadding(new Insets(10));
+        content.setMinWidth(450);
+        content.setPrefHeight(650);
+
+        // Section: Select/Manage Font Configs
+        VBox fontSection = new VBox(8);
+        Label fontLabel = new Label("Font Configurations");
+        fontLabel.setStyle("-fx-font-weight: bold;");
+        
+        ListView<String> fontList = new ListView<>();
+        fontList.getItems().addAll(currentTemplate.getFontLibrary().getFonts().keySet());
+        fontList.setPrefHeight(120);
+
+        HBox fontActions = new HBox(8);
+        fontActions.setAlignment(Pos.CENTER_LEFT);
+        TextField newFontNameField = new TextField();
+        newFontNameField.setPromptText("New Font Config Name");
+        HBox.setHgrow(newFontNameField, Priority.ALWAYS);
+        Button addFontBtn = new Button("Add Font");
+        Button removeFontBtn = new Button("Remove Selected");
+        fontActions.getChildren().addAll(newFontNameField, addFontBtn, removeFontBtn);
+        
+        fontSection.getChildren().addAll(fontLabel, fontList, fontActions);
+
+        // Section: Editor for selected font config
+        VBox editorSection = new VBox(8);
+        VBox.setVgrow(editorSection, Priority.ALWAYS);
+        Label editorLabel = new Label("Font Editor");
+        editorLabel.setStyle("-fx-font-weight: bold;");
+        
+        VBox editorContainer = new VBox(10);
+        editorContainer.setPadding(new Insets(5));
+        ScrollPane editorScroll = new ScrollPane(editorContainer);
+        editorScroll.setFitToWidth(true);
+        VBox.setVgrow(editorScroll, Priority.ALWAYS);
+        editorScroll.setStyle("-fx-background-color:transparent;");
+
+        fontList.getSelectionModel().selectedItemProperty().addListener((obs, old, newVal) -> {
+            editorContainer.getChildren().clear();
+            if (newVal != null) {
+                FontElement fontEl = currentTemplate.getFontLibrary().getFonts().get(newVal);
+                if (fontEl != null) {
+                    VBox props = new VBox(5);
+                    
+                    TextField familyField = new TextField(fontEl.getFontFamily());
+                    familyField.textProperty().bindBidirectional(fontEl.fontFamilyProperty());
+                    
+                    HBox sizeBox = createSliderWithNumericField(fontEl.fontSizeProperty(), 8, 120);
+                    
+                    ComboBox<FontWeight> weightBox = new ComboBox<>(FXCollections.observableArrayList(FontWeight.values()));
+                    weightBox.setValue(fontEl.getFontWeight());
+                    fontEl.fontWeightProperty().bind(weightBox.valueProperty());
+                    
+                    ComboBox<FontPosture> postureBox = new ComboBox<>(FXCollections.observableArrayList(FontPosture.values()));
+                    postureBox.setValue(fontEl.getFontPosture());
+                    fontEl.fontPostureProperty().bind(postureBox.valueProperty());
+                    
+                    ColorPicker colorPicker = new ColorPicker(Color.web(fontEl.getColor()));
+                    colorPicker.setOnAction(ce -> fontEl.setColor(toHexString(colorPicker.getValue())));
+
+                    HBox angleBox = createSliderWithNumericField(fontEl.angleProperty(), -360, 360);
+                    HBox outlineWidthBox = createSliderWithNumericField(fontEl.outlineWidthProperty(), 0, 20);
+                    ColorPicker outlineColorPicker = new ColorPicker(Color.web(fontEl.getOutlineColor()));
+                    outlineColorPicker.setOnAction(ce -> fontEl.setOutlineColor(toHexString(outlineColorPicker.getValue())));
+
+                    props.getChildren().addAll(
+                        new Label("Font Family"), familyField,
+                        new Label("Font Size"), sizeBox,
+                        new Label("Font Weight"), weightBox,
+                        new Label("Font Posture"), postureBox,
+                        new Label("Color"), colorPicker,
+                        new Label("Angle"), angleBox,
+                        new Label("Outline Width"), outlineWidthBox,
+                        new Label("Outline Color"), outlineColorPicker
+                    );
+                    editorContainer.getChildren().add(props);
+                }
+            } else {
+                editorContainer.getChildren().add(new Label("Select a font config to edit."));
+            }
+        });
+
+        addFontBtn.setOnAction(e -> {
+            String name = newFontNameField.getText().trim();
+            if (!name.isEmpty() && !currentTemplate.getFontLibrary().getFonts().containsKey(name)) {
+                currentTemplate.getFontLibrary().getFonts().put(name, new FontElement(name));
+                fontList.getItems().add(name);
+                fontList.getSelectionModel().select(name);
+                newFontNameField.clear();
+            }
+        });
+
+        removeFontBtn.setOnAction(e -> {
+            String selected = fontList.getSelectionModel().getSelectedItem();
+            if (selected != null) {
+                currentTemplate.getFontLibrary().getFonts().remove(selected);
+                fontList.getItems().remove(selected);
+                editorContainer.getChildren().clear();
+            }
+        });
+        
+        // Initial state
+        if (fontList.getItems().isEmpty()) {
+            editorContainer.getChildren().add(new Label("No font configs defined. Add one above."));
+        } else {
+            fontList.getSelectionModel().selectFirst();
+        }
+
+        editorSection.getChildren().addAll(new Separator(), editorLabel, editorScroll);
+        content.getChildren().addAll(fontSection, editorSection);
+        dialog.getDialogPane().setContent(content);
+        dialog.showAndWait();
+        renderTemplate();
+    }
+
     private void addElement(CardElement newEl) {
         CardElement selected = getSelectedElement();
         if (selected instanceof ContainerElement ce) {
@@ -918,6 +1727,89 @@ public class CardMakerController {
     }
 
     @FXML
+    void handleMoveForward(ActionEvent event) {
+        CardElement selected = getSelectedElement();
+        if (selected != null) {
+            saveExpandedState(elementTreeView.getRoot());
+            ObservableList<CardElement> parentList = findParentList(selected);
+            if (parentList != null) {
+                int index = parentList.indexOf(selected);
+                if (index < parentList.size() - 1) {
+                    parentList.remove(selected);
+                    parentList.add(index + 1, selected);
+                    renderTemplate();
+                    selectElement(selected);
+                }
+            }
+        }
+    }
+
+    @FXML
+    void handleMoveBackward(ActionEvent event) {
+        CardElement selected = getSelectedElement();
+        if (selected != null) {
+            saveExpandedState(elementTreeView.getRoot());
+            ObservableList<CardElement> parentList = findParentList(selected);
+            if (parentList != null) {
+                int index = parentList.indexOf(selected);
+                if (index > 0) {
+                    parentList.remove(selected);
+                    parentList.add(index - 1, selected);
+                    renderTemplate();
+                    selectElement(selected);
+                }
+            }
+        }
+    }
+
+    @FXML
+    void handleBringToFront(ActionEvent event) {
+        CardElement selected = getSelectedElement();
+        if (selected != null) {
+            saveExpandedState(elementTreeView.getRoot());
+            ObservableList<CardElement> parentList = findParentList(selected);
+            if (parentList != null) {
+                parentList.remove(selected);
+                parentList.add(selected);
+                renderTemplate();
+                selectElement(selected);
+            }
+        }
+    }
+
+    @FXML
+    void handleSendToBack(ActionEvent event) {
+        CardElement selected = getSelectedElement();
+        if (selected != null) {
+            saveExpandedState(elementTreeView.getRoot());
+            ObservableList<CardElement> parentList = findParentList(selected);
+            if (parentList != null) {
+                parentList.remove(selected);
+                parentList.add(0, selected);
+                renderTemplate();
+                selectElement(selected);
+            }
+        }
+    }
+
+    private ParentCardElement findParentElement(CardElement el) {
+        return findParentElementRecursive(currentTemplate.getElements(), el);
+    }
+
+    private ParentCardElement findParentElementRecursive(ObservableList<CardElement> elements, CardElement target) {
+        for (CardElement el : elements) {
+            if (el instanceof ParentCardElement pe) {
+                if (pe.getChildren().contains(target)) {
+                    return pe;
+                }
+                ParentCardElement found = findParentElementRecursive(pe.getChildren(), target);
+                if (found != null) return found;
+            }
+        }
+        return null;
+    }
+
+    @FXML
     void handleDeleteElement(ActionEvent event) {
         CardElement selected = getSelectedElement();
         if (selected != null) {
@@ -925,6 +1817,47 @@ public class CardMakerController {
             if (parentList != null) {
                 parentList.remove(selected);
             }
+        }
+    }
+
+    @FXML
+    void handleCopyElement(ActionEvent event) {
+        CardElement selected = getSelectedElement();
+        if (selected != null) {
+            try {
+                copiedElement = DeckStorage.clone(selected, CardElement.class);
+            } catch (IOException e) {
+                System.err.println("Failed to copy element: " + e.getMessage());
+            }
+        }
+    }
+
+    @FXML
+    void handlePasteElement(ActionEvent event) {
+        if (copiedElement == null) return;
+
+        try {
+            CardElement newEl = DeckStorage.clone(copiedElement, CardElement.class);
+            // Offsetting the pasted element slightly so it's visible if pasted in the same place
+            newEl.setX(newEl.getX() + 10);
+            newEl.setY(newEl.getY() + 10);
+            newEl.setName(newEl.getName() + " (Copy)");
+
+            CardElement selected = getSelectedElement();
+            if (selected instanceof ParentCardElement pe) {
+                pe.getChildren().add(newEl);
+            } else if (selected != null) {
+                ObservableList<CardElement> parentList = findParentList(selected);
+                if (parentList != null) {
+                    int index = parentList.indexOf(selected);
+                    parentList.add(index + 1, newEl);
+                }
+            } else {
+                currentTemplate.getElements().add(newEl);
+            }
+            selectElement(newEl);
+        } catch (IOException e) {
+            System.err.println("Failed to paste element: " + e.getMessage());
         }
     }
 
@@ -937,11 +1870,11 @@ public class CardMakerController {
 
     private ObservableList<CardElement> findParentListRecursive(ObservableList<CardElement> elements, CardElement target) {
         for (CardElement el : elements) {
-            if (el instanceof ContainerElement ce) {
-                if (ce.getChildren().contains(target)) {
-                    return ce.getChildren();
+            if (el instanceof ParentCardElement pe) {
+                if (pe.getChildren().contains(target)) {
+                    return pe.getChildren();
                 }
-                ObservableList<CardElement> found = findParentListRecursive(ce.getChildren(), target);
+                ObservableList<CardElement> found = findParentListRecursive(pe.getChildren(), target);
                 if (found != null) return found;
             }
         }
@@ -1000,6 +1933,12 @@ public class CardMakerController {
     }
 
     @FXML
+    void handlePrintDeck(ActionEvent event) {
+        PrintService printService = new PrintService(currentTemplate, csvData, dataMerger, this);
+        printService.showPrintDialog(propertiesPane.getScene().getWindow());
+    }
+
+    @FXML
     void handleExit(ActionEvent event) {
         saveTempDeck();
         javafx.application.Platform.exit();
@@ -1016,6 +1955,51 @@ public class CardMakerController {
         showClippedContent = ((CheckMenuItem) event.getSource()).isSelected();
         updateCanvasSize();
         renderTemplate();
+    }
+
+    @FXML
+    void handleZoomIn(ActionEvent event) {
+        zoomLevel *= 1.2;
+        updateZoom();
+    }
+
+    @FXML
+    void handleZoomOut(ActionEvent event) {
+        zoomLevel /= 1.2;
+        updateZoom();
+    }
+
+    @FXML
+    void handleResetZoom(ActionEvent event) {
+        zoomLevel = 1.0;
+        updateZoom();
+    }
+
+    private void updateZoom() {
+        cardCanvas.setScaleX(zoomLevel);
+        cardCanvas.setScaleY(zoomLevel);
+        zoomLabel.setText(String.format("%.0f%%", zoomLevel * 100));
+    }
+
+    private void updateSizeLabel() {
+        if (sizeLabel != null && currentTemplate != null) {
+            CardDimension d = currentTemplate.getDimension();
+            sizeLabel.setText(String.format("%.1f x %.1f mm", d.getWidthMm(), d.getHeightMm()));
+        }
+    }
+
+    private void setupZoomListeners() {
+        canvasContainer.addEventFilter(ScrollEvent.SCROLL, event -> {
+            if (event.isControlDown() || event.isShortcutDown()) {
+                if (event.getDeltaY() > 0) {
+                    zoomLevel *= 1.1;
+                } else if (event.getDeltaY() < 0) {
+                    zoomLevel /= 1.1;
+                }
+                updateZoom();
+                event.consume();
+            }
+        });
     }
 
     void saveTempDeck() {
@@ -1060,9 +2044,13 @@ public class CardMakerController {
     @FXML
     void handleSaveDeckAs(ActionEvent event) {
         FileChooser fileChooser = new FileChooser();
+        if (lastOpenedDirectory != null && lastOpenedDirectory.exists()) {
+            fileChooser.setInitialDirectory(lastOpenedDirectory);
+        }
         fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("CardMaker Files", "*.cm"));
         File file = fileChooser.showSaveDialog(propertiesPane.getScene().getWindow());
         if (file != null) {
+            lastOpenedDirectory = file.getParentFile();
             currentFile = file;
             saveToFile(file);
         }
@@ -1071,10 +2059,14 @@ public class CardMakerController {
     @FXML
     void handleOpenDeck(ActionEvent event) {
         FileChooser fileChooser = new FileChooser();
+        if (lastOpenedDirectory != null && lastOpenedDirectory.exists()) {
+            fileChooser.setInitialDirectory(lastOpenedDirectory);
+        }
         fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("CardMaker Files", "*.cm"));
         File file = fileChooser.showOpenDialog(propertiesPane.getScene().getWindow());
         if (file != null) {
             try {
+                lastOpenedDirectory = file.getParentFile();
                 CardTemplate template = DeckStorage.load(file);
                 currentFile = file;
                 applyTemplate(template);
