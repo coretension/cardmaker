@@ -8,6 +8,7 @@ public class ImageElement extends CardElement {
     private final DoubleProperty width = new SimpleDoubleProperty(50);
     private final DoubleProperty height = new SimpleDoubleProperty(50);
     private final BooleanProperty lockAspectRatio = new SimpleBooleanProperty(true);
+    private final BooleanProperty allowOverflow = new SimpleBooleanProperty(false);
 
     public ImageElement() {
         this("Image");
@@ -36,4 +37,9 @@ public class ImageElement extends CardElement {
     public void setLockAspectRatio(boolean value) { lockAspectRatio.set(value); }
     @JsonIgnore
     public BooleanProperty lockAspectRatioProperty() { return lockAspectRatio; }
+
+    public boolean isAllowOverflow() { return allowOverflow.get(); }
+    public void setAllowOverflow(boolean value) { allowOverflow.set(value); }
+    @JsonIgnore
+    public BooleanProperty allowOverflowProperty() { return allowOverflow; }
 }

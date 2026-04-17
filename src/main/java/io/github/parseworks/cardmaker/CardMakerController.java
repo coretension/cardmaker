@@ -87,7 +87,16 @@ public class CardMakerController {
                         else type = "[E]";
                         textProperty().bind(item.nameProperty().map(name -> type + " " + name));
                         
+                        opacityProperty().bind(item.enabledProperty().map(e -> e ? 1.0 : 0.5));
+                        
                         ContextMenu contextMenu = new ContextMenu();
+                        MenuItem enableDisableItem = new MenuItem();
+                        enableDisableItem.textProperty().bind(item.enabledProperty().map(e -> e ? "Disable" : "Enable"));
+                        enableDisableItem.setOnAction(e -> {
+                            item.setEnabled(!item.isEnabled());
+                            renderTemplate();
+                        });
+
                         MenuItem copyItem = new MenuItem("Copy");
                         copyItem.setAccelerator(new KeyCodeCombination(KeyCode.C, KeyCombination.SHORTCUT_DOWN));
                         copyItem.setOnAction(e -> handleCopyElement(null));
@@ -112,7 +121,8 @@ public class CardMakerController {
                         MenuItem sendToBack = new MenuItem("Send to Back");
                         sendToBack.setOnAction(e -> handleSendToBack(null));
 
-                        contextMenu.getItems().addAll(copyItem, pasteItem, new SeparatorMenuItem(), 
+                        contextMenu.getItems().addAll(enableDisableItem, new SeparatorMenuItem(),
+                                copyItem, pasteItem, new SeparatorMenuItem(), 
                                 moveForward, moveBackward, bringToFront, sendToBack,
                                 new SeparatorMenuItem(), deleteItem);
                         setContextMenu(contextMenu);
@@ -439,6 +449,16 @@ public class CardMakerController {
         return null;
     }
 
+    private boolean hasOverflowingImage(ObservableList<CardElement> elements) {
+        for (CardElement el : elements) {
+            if (el instanceof ImageElement ie && ie.isAllowOverflow()) return true;
+            if (el instanceof ParentCardElement pe) {
+                if (hasOverflowingImage(pe.getChildren())) return true;
+            }
+        }
+        return false;
+    }
+
     private void updateCanvasSize() {
         double width = currentTemplate.getDimension().getWidthPx();
         double height = currentTemplate.getDimension().getHeightPx();
@@ -473,6 +493,7 @@ public class CardMakerController {
     private void renderElements(ObservableList<CardElement> elements, Pane targetPane, Map<String, String> currentRecord, FontElement inheritedFont, ContainerElement.LayoutType containerLayout, ContainerElement.Alignment containerAlignment, boolean forFinalDesign) {
         FontElement currentFont = inheritedFont;
         for (CardElement el : elements) {
+            if (!el.isEnabled()) continue;
             if (el instanceof ConditionElement ce) {
                 if (dataMerger.evaluateCondition(ce.getCondition(), currentRecord)) {
                     renderElements(ce.getChildren(), targetPane, currentRecord, currentFont, containerLayout, containerAlignment, forFinalDesign);
@@ -641,6 +662,11 @@ public class CardMakerController {
             imageView.fitWidthProperty().bind(ie.widthProperty());
             imageView.fitHeightProperty().bind(ie.heightProperty());
             imageView.preserveRatioProperty().bind(ie.lockAspectRatioProperty());
+            
+            if (ie.isAllowOverflow()) {
+                imageView.setManaged(false);
+            }
+            
             node = imageView;
             if (isPositional) {
                 imageView.layoutXProperty().bind(ie.xProperty());
@@ -943,15 +969,19 @@ public class CardMakerController {
             }
             
             // Constrain X
-            newX = Math.max(0, newX);
-            if (newX + width > cardWidth) {
-                newX = Math.max(0, cardWidth - width);
+            if (!(el instanceof ImageElement ie && ie.isAllowOverflow())) {
+                newX = Math.max(0, newX);
+                if (newX + width > cardWidth) {
+                    newX = Math.max(0, cardWidth - width);
+                }
             }
             
             // Constrain Y
-            newY = Math.max(0, newY);
-            if (newY + height > cardHeight) {
-                newY = Math.max(0, cardHeight - height);
+            if (!(el instanceof ImageElement ie && ie.isAllowOverflow())) {
+                newY = Math.max(0, newY);
+                if (newY + height > cardHeight) {
+                    newY = Math.max(0, cardHeight - height);
+                }
             }
 
             el.setX(newX);
@@ -1066,34 +1096,32 @@ public class CardMakerController {
             te.fontConfigNameProperty().bind(fontConfigCombo.valueProperty());
             addManagedListener(te.fontConfigNameProperty(), (obs, old, newVal) -> renderTemplate());
 
+            javafx.beans.binding.BooleanBinding isNotDefault = te.fontConfigNameProperty().isNotEqualTo("Default");
+
             HBox sizeBox = createSliderWithNumericField(te.fontSizeProperty(), 8, 72);
+            sizeBox.disableProperty().bind(isNotDefault);
             addManagedListener(te.fontSizeProperty(), (obs, old, newVal) -> renderTemplate());
             ColorPicker colorPicker = new ColorPicker(Color.web(te.getColor()));
+            colorPicker.setStyle("-fx-color-label-visible: true;");
+            colorPicker.setMaxWidth(Double.MAX_VALUE);
+            colorPicker.disableProperty().bind(isNotDefault);
             colorPicker.setOnAction(e -> {
                 te.setColor(toHexString(colorPicker.getValue()));
                 renderTemplate();
             });
 
             HBox angleBox = createSliderWithNumericField(te.angleProperty(), -360, 360);
+            angleBox.disableProperty().bind(isNotDefault);
             addManagedListener(te.angleProperty(), (obs, old, newVal) -> renderTemplate());
-            HBox outlineWidthBox = createSliderWithNumericField(te.outlineWidthProperty(), 0, 20);
-            addManagedListener(te.outlineWidthProperty(), (obs, old, newVal) -> renderTemplate());
-            ColorPicker outlineColorPicker = new ColorPicker(Color.web(te.getOutlineColor()));
-            outlineColorPicker.setOnAction(e -> {
-                te.setOutlineColor(toHexString(outlineColorPicker.getValue()));
-                renderTemplate();
-            });
 
             HBox wrappingWidthBox = createSliderWithNumericField(te.wrappingWidthProperty(), 0, 1000);
             addManagedListener(te.wrappingWidthProperty(), (obs, old, newVal) -> renderTemplate());
             
             propertiesPane.getChildren().addAll(new Label("Text content (use {{header}} for merge)"), textArea, 
                                             new Label("Font Configuration"), fontConfigCombo,
-                                            new Label("Font Size (if no config)"), sizeBox,
-                                            new Label("Color (if no config)"), colorPicker,
-                                            new Label("Angle (if no config)"), angleBox,
-                                            new Label("Outline Width (if no config)"), outlineWidthBox,
-                                            new Label("Outline Color (if no config)"), outlineColorPicker,
+                                            new Label("Font Size"), sizeBox,
+                                            new Label("Color"), colorPicker,
+                                            new Label("Angle"), angleBox,
                                             new Label("Wrapping Width (0 for none)"), wrappingWidthBox);
         } else if (el instanceof ImageElement ie) {
             TextField pathField = new TextField(ie.getImagePath());
@@ -1160,10 +1188,18 @@ public class CardMakerController {
             CheckBox lockAspectBox = new CheckBox("Lock Aspect Ratio");
             lockAspectBox.selectedProperty().bindBidirectional(ie.lockAspectRatioProperty());
 
+            CheckBox allowOverflowBox = new CheckBox("Allow Overflow (goes out of bounds)");
+            allowOverflowBox.selectedProperty().bindBidirectional(ie.allowOverflowProperty());
+            addManagedListener(ie.allowOverflowProperty(), (obs, old, newVal) -> {
+                updateCanvasSize();
+                renderTemplate();
+            });
+
             propertiesPane.getChildren().addAll(new Label("Image Path"), new HBox(5, pathField, browseBtn),
                                             new Label("Width"), widthBox,
                                             new Label("Height"), heightBox,
-                                            lockAspectBox);
+                                            lockAspectBox,
+                                            allowOverflowBox);
         } else if (el instanceof ContainerElement ce) {
             HBox widthBox = createSliderWithNumericField(ce.widthProperty(), 10, 500);
             addManagedListener(ce.widthProperty(), (obs, old, newVal) -> {
@@ -1190,6 +1226,8 @@ public class CardMakerController {
 
             HBox alphaBox = createSliderWithNumericField(ce.alphaProperty(), 0.0, 1.0);
             ColorPicker colorPicker = new ColorPicker(Color.TRANSPARENT);
+            colorPicker.setStyle("-fx-color-label-visible: true;");
+            colorPicker.setMaxWidth(Double.MAX_VALUE);
             try {
                 colorPicker.setValue(Color.web(ce.getBackgroundColor()));
             } catch (Exception e) {
@@ -1275,6 +1313,8 @@ public class CardMakerController {
 
             addManagedListener(fe.colorProperty(), (obs, old, newVal) -> renderTemplate());
             ColorPicker colorPicker = new ColorPicker(Color.web(fe.getColor()));
+            colorPicker.setStyle("-fx-color-label-visible: true;");
+            colorPicker.setMaxWidth(Double.MAX_VALUE);
             colorPicker.setOnAction(e -> {
                 fe.setColor(toHexString(colorPicker.getValue()));
                 renderTemplate();
@@ -1287,6 +1327,8 @@ public class CardMakerController {
             addManagedListener(fe.outlineWidthProperty(), (obs, old, newVal) -> renderTemplate());
 
             ColorPicker outlineColorPicker = new ColorPicker(Color.web(fe.getOutlineColor()));
+            outlineColorPicker.setStyle("-fx-color-label-visible: true;");
+            outlineColorPicker.setMaxWidth(Double.MAX_VALUE);
             outlineColorPicker.setOnAction(e -> {
                 fe.setOutlineColor(toHexString(outlineColorPicker.getValue()));
                 renderTemplate();
@@ -1626,11 +1668,15 @@ public class CardMakerController {
                     fontEl.fontPostureProperty().bind(postureBox.valueProperty());
                     
                     ColorPicker colorPicker = new ColorPicker(Color.web(fontEl.getColor()));
+                    colorPicker.setStyle("-fx-color-label-visible: true;");
+                    colorPicker.setMaxWidth(Double.MAX_VALUE);
                     colorPicker.setOnAction(ce -> fontEl.setColor(toHexString(colorPicker.getValue())));
 
                     HBox angleBox = createSliderWithNumericField(fontEl.angleProperty(), -360, 360);
                     HBox outlineWidthBox = createSliderWithNumericField(fontEl.outlineWidthProperty(), 0, 20);
                     ColorPicker outlineColorPicker = new ColorPicker(Color.web(fontEl.getOutlineColor()));
+                    outlineColorPicker.setStyle("-fx-color-label-visible: true;");
+                    outlineColorPicker.setMaxWidth(Double.MAX_VALUE);
                     outlineColorPicker.setOnAction(ce -> fontEl.setOutlineColor(toHexString(outlineColorPicker.getValue())));
 
                     props.getChildren().addAll(

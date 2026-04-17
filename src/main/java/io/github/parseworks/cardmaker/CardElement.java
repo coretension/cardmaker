@@ -23,6 +23,7 @@ public abstract class CardElement {
     protected final DoubleProperty x = new SimpleDoubleProperty(0);
     protected final DoubleProperty y = new SimpleDoubleProperty(0);
     protected final StringProperty name = new SimpleStringProperty("Element");
+    protected final BooleanProperty enabled = new SimpleBooleanProperty(true);
 
     public double getX() { return x.get(); }
     public void setX(double value) { x.set(value); }
@@ -38,4 +39,9 @@ public abstract class CardElement {
     public void setName(String value) { name.set(value); }
     @JsonIgnore
     public StringProperty nameProperty() { return name; }
+
+    public boolean isEnabled() { return enabled.get(); }
+    public void setEnabled(boolean value) { enabled.set(value); }
+    @JsonIgnore
+    public BooleanProperty enabledProperty() { return enabled; }
 }
