@@ -521,15 +521,17 @@ public class CardMakerController {
     private void updateCanvasSize() {
         double width = currentTemplate.getDimension().getWidthPx();
         double height = currentTemplate.getDimension().getHeightPx();
-        cardCanvas.setMinWidth(width);
-        cardCanvas.setMaxWidth(width);
-        cardCanvas.setMinHeight(height);
-        cardCanvas.setMaxHeight(height);
+        double bleedPx = currentTemplate.getBleedMm() * (CardDimension.getDpi() / 25.4);
+        
+        cardCanvas.setMinWidth(width + 2 * bleedPx);
+        cardCanvas.setMaxWidth(width + 2 * bleedPx);
+        cardCanvas.setMinHeight(height + 2 * bleedPx);
+        cardCanvas.setMaxHeight(height + 2 * bleedPx);
         
         updateSizeLabel();
         
         if (!showClippedContent) {
-            javafx.scene.shape.Rectangle clip = new javafx.scene.shape.Rectangle(width, height);
+            javafx.scene.shape.Rectangle clip = new javafx.scene.shape.Rectangle(width + 2 * bleedPx, height + 2 * bleedPx);
             cardCanvas.setClip(clip);
         } else {
             cardCanvas.setClip(null);
@@ -538,10 +540,29 @@ public class CardMakerController {
 
     private void renderTemplate() {
         cardCanvas.getChildren().clear();
+        double bleedPx = currentTemplate.getBleedMm() * (CardDimension.getDpi() / 25.4);
+        
+        // Add bleed guide
+        if (bleedPx > 0 && !previewMode) {
+            javafx.scene.shape.Rectangle bleedGuide = new javafx.scene.shape.Rectangle(bleedPx, bleedPx, 
+                    currentTemplate.getDimension().getWidthPx(), currentTemplate.getDimension().getHeightPx());
+            bleedGuide.setFill(Color.TRANSPARENT);
+            bleedGuide.setStroke(Color.RED);
+            bleedGuide.setStrokeWidth(1);
+            bleedGuide.getStrokeDashArray().addAll(5.0, 5.0);
+            bleedGuide.setMouseTransparent(true);
+            cardCanvas.getChildren().add(bleedGuide);
+        }
+
         Map<String, String> currentRecord = (currentRecordIndex >= 0 && currentRecordIndex < csvData.size()) 
                 ? csvData.get(currentRecordIndex) : null;
 
-        renderElements(currentTemplate.getElements(), cardCanvas, currentRecord, null, ContainerElement.LayoutType.POSITIONAL, ContainerElement.Alignment.LEFT, false, false);
+        Pane contentPane = new Pane();
+        contentPane.setLayoutX(bleedPx);
+        contentPane.setLayoutY(bleedPx);
+        cardCanvas.getChildren().add(contentPane);
+
+        renderElements(currentTemplate.getElements(), contentPane, currentRecord, null, ContainerElement.LayoutType.POSITIONAL, ContainerElement.Alignment.LEFT, false, false);
         highlightOnCanvas(getSelectedElement());
     }
 
@@ -2051,6 +2072,25 @@ public class CardMakerController {
     }
 
     @FXML
+    void handleExportPdf(ActionEvent event) {
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Export to PDF");
+        fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("PDF Files", "*.pdf"));
+        File file = fileChooser.showSaveDialog(propertiesPane.getScene().getWindow());
+        if (file != null) {
+            PdfExportService exportService = new PdfExportService(currentTemplate, csvData, this);
+            try {
+                exportService.exportToPdf(file);
+                Alert alert = new Alert(Alert.AlertType.INFORMATION, "PDF exported successfully!");
+                alert.show();
+            } catch (IOException e) {
+                Alert alert = new Alert(Alert.AlertType.ERROR, "Failed to export PDF: " + e.getMessage());
+                alert.show();
+            }
+        }
+    }
+
+    @FXML
     void handleSettings(ActionEvent event) {
         Dialog<AppSettings> dialog = new Dialog<>();
         dialog.setTitle("Settings");
@@ -2078,22 +2118,37 @@ public class CardMakerController {
             }
         });
 
+        TextField bleedField = new TextField(String.valueOf(currentTemplate.getBleedMm()));
+        bleedField.setPrefWidth(50);
+
         grid.add(new Label("Last Opened/Saved Deck:"), 0, 0);
         grid.add(pathField, 1, 0);
         grid.add(browseButton, 2, 0);
+        grid.add(new Label("Card Bleed (mm):"), 0, 1);
+        grid.add(bleedField, 1, 1);
 
         dialog.getDialogPane().setContent(grid);
 
         dialog.setResultConverter(dialogButton -> {
             if (dialogButton == saveButtonType) {
                 settings.setLastOpenedDeckPath(pathField.getText().isEmpty() ? null : pathField.getText());
+                try {
+                    double bleed = Double.parseDouble(bleedField.getText());
+                    currentTemplate.setBleedMm(bleed);
+                } catch (NumberFormatException e) {
+                    // Ignore or show alert
+                }
                 return settings;
             }
             return null;
         });
 
         Optional<AppSettings> result = dialog.showAndWait();
-        result.ifPresent(s -> saveSettings());
+        result.ifPresent(s -> {
+            saveSettings();
+            updateCanvasSize();
+            renderTemplate();
+        });
     }
 
     @FXML
@@ -2143,7 +2198,12 @@ public class CardMakerController {
     private void updateSizeLabel() {
         if (sizeLabel != null && currentTemplate != null) {
             CardDimension d = currentTemplate.getDimension();
-            sizeLabel.setText(String.format("%.1f x %.1f mm", d.getWidthMm(), d.getHeightMm()));
+            double bleed = currentTemplate.getBleedMm();
+            if (bleed > 0) {
+                sizeLabel.setText(String.format("%.1f x %.1f mm (Bleed: %.1f mm)", d.getWidthMm(), d.getHeightMm(), bleed));
+            } else {
+                sizeLabel.setText(String.format("%.1f x %.1f mm", d.getWidthMm(), d.getHeightMm()));
+            }
         }
     }
 

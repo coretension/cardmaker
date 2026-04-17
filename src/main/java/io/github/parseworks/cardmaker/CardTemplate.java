@@ -5,6 +5,7 @@ import javafx.collections.ObservableList;
 
 public class CardTemplate {
     private CardDimension dimension = CardDimension.POKER;
+    private double bleedMm = 3.0;
     private final ObservableList<CardElement> elements = FXCollections.observableArrayList();
     private String csvPath;
     private IconLibrary iconLibrary = new IconLibrary();
@@ -12,6 +13,9 @@ public class CardTemplate {
 
     public CardDimension getDimension() { return dimension; }
     public void setDimension(CardDimension dimension) { this.dimension = dimension; }
+
+    public double getBleedMm() { return bleedMm; }
+    public void setBleedMm(double bleedMm) { this.bleedMm = bleedMm; }
 
     public ObservableList<CardElement> getElements() { return elements; }
 

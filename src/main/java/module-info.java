@@ -11,6 +11,7 @@ module io.github.parseworks.cardmaker {
 
     requires com.opencsv;
     requires com.fasterxml.jackson.databind;
+    requires com.github.librepdf.openpdf;
 
     opens io.github.parseworks.cardmaker to javafx.fxml, com.fasterxml.jackson.databind;
     exports io.github.parseworks.cardmaker;
