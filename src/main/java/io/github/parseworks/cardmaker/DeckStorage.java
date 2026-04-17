@@ -40,6 +40,28 @@ public class DeckStorage {
         return mapper.readValue(file, CardTemplate.class);
     }
 
+    public static void saveSettings(AppSettings settings) throws IOException {
+        mapper.writerWithDefaultPrettyPrinter().writeValue(getSettingsFile(), settings);
+    }
+
+    public static AppSettings loadSettings() throws IOException {
+        File file = getSettingsFile();
+        if (file.exists()) {
+            return mapper.readValue(file, AppSettings.class);
+        }
+        return new AppSettings();
+    }
+
+    public static File getSettingsFile() {
+        String userHome = System.getProperty("user.home");
+        Path path = Paths.get(userHome, ".cardmaker", "settings.json");
+        File file = path.toFile();
+        if (!file.getParentFile().exists()) {
+            file.getParentFile().mkdirs();
+        }
+        return file;
+    }
+
     public static <T> T clone(T object, Class<T> clazz) throws IOException {
         String json = mapper.writeValueAsString(object);
         return mapper.readValue(json, clazz);

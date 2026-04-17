@@ -19,6 +19,9 @@
                 <MenuItem text="Load CSV" onAction="#handleLoadCsv"/>
                 <MenuItem text="View CSV Data" onAction="#handleViewData"/>
                 <MenuItem text="Print Deck" onAction="#handlePrintDeck"/>
+                <SeparatorMenuItem/>
+                <MenuItem text="Settings" onAction="#handleSettings"/>
+                <SeparatorMenuItem/>
                 <MenuItem text="Exit" onAction="#handleExit"/>
             </Menu>
             <Menu text="View">
@@ -65,6 +68,11 @@
                 <Label fx:id="zoomLabel" text="100%" StackPane.alignment="BOTTOM_RIGHT" mouseTransparent="true" style="-fx-background-color: rgba(0,0,0,0.5); -fx-text-fill: white; -fx-padding: 5; -fx-background-radius: 5;">
                     <StackPane.margin>
                         <Insets bottom="10" right="10"/>
+                    </StackPane.margin>
+                </Label>
+                <Label fx:id="coordinatesLabel" text="X: 0, Y: 0" visible="false" StackPane.alignment="TOP_RIGHT" mouseTransparent="true" style="-fx-background-color: rgba(0,0,0,0.5); -fx-text-fill: white; -fx-padding: 5; -fx-background-radius: 5;">
+                    <StackPane.margin>
+                        <Insets top="10" right="10"/>
                     </StackPane.margin>
                 </Label>
             </StackPane>

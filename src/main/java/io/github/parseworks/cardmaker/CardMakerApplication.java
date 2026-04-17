@@ -21,7 +21,10 @@ public class CardMakerApplication extends Application {
 
         stage.setTitle("Card Maker");
         stage.setScene(scene);
-        stage.setOnCloseRequest(event -> controller.saveTempDeck());
+        stage.setOnCloseRequest(event -> {
+            controller.saveTempDeck();
+            controller.saveSettings();
+        });
         stage.show();
     }
 }

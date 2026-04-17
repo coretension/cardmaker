@@ -17,6 +17,7 @@ public class ContainerElement extends ParentCardElement {
     private final ObjectProperty<LayoutType> layoutType = new SimpleObjectProperty<>(LayoutType.POSITIONAL);
     private final ObjectProperty<Alignment> alignment = new SimpleObjectProperty<>(Alignment.LEFT);
     private final DoubleProperty spacing = new SimpleDoubleProperty(0);
+    private final BooleanProperty locked = new SimpleBooleanProperty(false);
 
     public ContainerElement() {
         this("Container");
@@ -60,6 +61,11 @@ public class ContainerElement extends ParentCardElement {
     public void setSpacing(double value) { spacing.set(value); }
     @JsonIgnore
     public DoubleProperty spacingProperty() { return spacing; }
+
+    public boolean isLocked() { return locked.get(); }
+    public void setLocked(boolean value) { locked.set(value); }
+    @JsonIgnore
+    public BooleanProperty lockedProperty() { return locked; }
 
     public boolean isLockAspectRatio() { return lockAspectRatio.get(); }
     public void setLockAspectRatio(boolean value) { lockAspectRatio.set(value); }

@@ -47,6 +47,10 @@ public class CardMakerController {
     @FXML private StackPane canvasContainer;
     @FXML private Label zoomLabel;
     @FXML private Label sizeLabel;
+    @FXML private Label coordinatesLabel;
+
+    private final Map<CardElement, ChangeListener<Number>> xListeners = new HashMap<>();
+    private final Map<CardElement, ChangeListener<Number>> yListeners = new HashMap<>();
 
     private CardTemplate currentTemplate = new CardTemplate();
     private List<Map<String, String>> csvData = new ArrayList<>();
@@ -55,6 +59,7 @@ public class CardMakerController {
     private final DataMerger dataMerger = new DataMerger();
     private File currentFile;
     private File lastOpenedDirectory;
+    private AppSettings settings;
     private boolean previewMode = false;
     private boolean showClippedContent = false;
     private double zoomLevel = 1.0;
@@ -62,11 +67,22 @@ public class CardMakerController {
 
     @FXML
     public void initialize() {
+        loadSettings();
         setupTemplateListeners();
         updateCanvasSize();
         updateSizeLabel();
         setupZoomListeners();
-        loadTempDeck();
+        
+        if (settings.getLastOpenedDeckPath() != null) {
+            File lastFile = new File(settings.getLastOpenedDeckPath());
+            if (lastFile.exists()) {
+                loadDeck(lastFile);
+            } else {
+                loadTempDeck();
+            }
+        } else {
+            loadTempDeck();
+        }
         
         elementTreeView.setCellFactory(tv -> {
             TreeCell<CardElement> cell = new TreeCell<>() {
@@ -121,7 +137,20 @@ public class CardMakerController {
                         MenuItem sendToBack = new MenuItem("Send to Back");
                         sendToBack.setOnAction(e -> handleSendToBack(null));
 
-                        contextMenu.getItems().addAll(enableDisableItem, new SeparatorMenuItem(),
+                        MenuItem lockUnlockItem = new MenuItem();
+                        if (item instanceof ContainerElement ce) {
+                            lockUnlockItem.textProperty().bind(ce.lockedProperty().map(l -> l ? "Unlock Container" : "Lock Container"));
+                            lockUnlockItem.setOnAction(e -> {
+                                ce.setLocked(!ce.isLocked());
+                                renderTemplate();
+                            });
+                        }
+
+                        contextMenu.getItems().addAll(enableDisableItem);
+                        if (item instanceof ContainerElement) {
+                            contextMenu.getItems().add(lockUnlockItem);
+                        }
+                        contextMenu.getItems().addAll(new SeparatorMenuItem(),
                                 copyItem, pasteItem, new SeparatorMenuItem(), 
                                 moveForward, moveBackward, bringToFront, sendToBack,
                                 new SeparatorMenuItem(), deleteItem);
@@ -268,7 +297,37 @@ public class CardMakerController {
             CardElement el = (newVal != null) ? newVal.getValue() : null;
             updatePropertiesPane(el);
             highlightOnCanvas(el);
+            updateCoordinatesLabel(el);
         });
+    }
+
+    private void updateCoordinatesLabel(CardElement el) {
+        if (el == null) {
+            coordinatesLabel.setVisible(false);
+            return;
+        }
+        coordinatesLabel.setVisible(true);
+        coordinatesLabel.setText(String.format("X: %.1f, Y: %.1f", el.getX(), el.getY()));
+        
+        // Ensure we only have one listener per element to avoid leaks and duplicate updates
+        if (!xListeners.containsKey(el)) {
+            ChangeListener<Number> xListener = (obs, oldX, newX) -> {
+                if (getSelectedElement() == el) {
+                    coordinatesLabel.setText(String.format("X: %.1f, Y: %.1f", el.getX(), el.getY()));
+                }
+            };
+            el.xProperty().addListener(xListener);
+            xListeners.put(el, xListener);
+        }
+        if (!yListeners.containsKey(el)) {
+            ChangeListener<Number> yListener = (obs, oldY, newY) -> {
+                if (getSelectedElement() == el) {
+                    coordinatesLabel.setText(String.format("X: %.1f, Y: %.1f", el.getX(), el.getY()));
+                }
+            };
+            el.yProperty().addListener(yListener);
+            yListeners.put(el, yListener);
+        }
     }
 
     private void moveElement(CardElement element, TreeItem<CardElement> targetItem, double relativeY) {
@@ -482,21 +541,21 @@ public class CardMakerController {
         Map<String, String> currentRecord = (currentRecordIndex >= 0 && currentRecordIndex < csvData.size()) 
                 ? csvData.get(currentRecordIndex) : null;
 
-        renderElements(currentTemplate.getElements(), cardCanvas, currentRecord, null, ContainerElement.LayoutType.POSITIONAL, ContainerElement.Alignment.LEFT, false);
+        renderElements(currentTemplate.getElements(), cardCanvas, currentRecord, null, ContainerElement.LayoutType.POSITIONAL, ContainerElement.Alignment.LEFT, false, false);
         highlightOnCanvas(getSelectedElement());
     }
 
     public void renderElementsExternal(ObservableList<CardElement> elements, Pane targetPane, Map<String, String> currentRecord, boolean forFinalDesign) {
-        renderElements(elements, targetPane, currentRecord, null, ContainerElement.LayoutType.POSITIONAL, ContainerElement.Alignment.LEFT, forFinalDesign);
+        renderElements(elements, targetPane, currentRecord, null, ContainerElement.LayoutType.POSITIONAL, ContainerElement.Alignment.LEFT, forFinalDesign, false);
     }
 
-    private void renderElements(ObservableList<CardElement> elements, Pane targetPane, Map<String, String> currentRecord, FontElement inheritedFont, ContainerElement.LayoutType containerLayout, ContainerElement.Alignment containerAlignment, boolean forFinalDesign) {
+    private void renderElements(ObservableList<CardElement> elements, Pane targetPane, Map<String, String> currentRecord, FontElement inheritedFont, ContainerElement.LayoutType containerLayout, ContainerElement.Alignment containerAlignment, boolean forFinalDesign, boolean isLocked) {
         FontElement currentFont = inheritedFont;
         for (CardElement el : elements) {
             if (!el.isEnabled()) continue;
             if (el instanceof ConditionElement ce) {
                 if (dataMerger.evaluateCondition(ce.getCondition(), currentRecord)) {
-                    renderElements(ce.getChildren(), targetPane, currentRecord, currentFont, containerLayout, containerAlignment, forFinalDesign);
+                    renderElements(ce.getChildren(), targetPane, currentRecord, currentFont, containerLayout, containerAlignment, forFinalDesign, isLocked);
                 }
                 continue;
             }
@@ -510,7 +569,7 @@ public class CardMakerController {
                 List<Node> iconNodes = createIconNodes(ice, currentRecord, containerAlignment);
                 for (Node node : iconNodes) {
                     targetPane.getChildren().add(node);
-                    if (!forFinalDesign) {
+                    if (!forFinalDesign && !isLocked) {
                         makeDraggable(node, ice);
                     }
                     node.getProperties().put("cardElement", ice);
@@ -518,19 +577,21 @@ public class CardMakerController {
                 continue;
             }
 
-            Node node = createNodeForElement(el, currentRecord, currentFont, containerLayout, containerAlignment, forFinalDesign);
+            Node node = createNodeForElement(el, currentRecord, currentFont, containerLayout, containerAlignment, forFinalDesign, isLocked);
             if (node != null) {
                 targetPane.getChildren().add(node);
                 if (el instanceof ParentCardElement pe && node instanceof Pane childPane) {
                     ContainerElement.LayoutType childLayout = ContainerElement.LayoutType.POSITIONAL;
                     ContainerElement.Alignment childAlign = ContainerElement.Alignment.LEFT;
+                    boolean nextLocked = isLocked;
                     
                     if (pe instanceof ContainerElement ce) {
                         childLayout = ce.getLayoutType();
                         childAlign = ce.getAlignment();
+                        nextLocked |= ce.isLocked();
                     }
                     
-                    renderElements(pe.getChildren(), childPane, currentRecord, currentFont, childLayout, childAlign, forFinalDesign);
+                    renderElements(pe.getChildren(), childPane, currentRecord, currentFont, childLayout, childAlign, forFinalDesign, nextLocked);
                 }
                 if (node instanceof Pane pane) {
                     ensureResizeHandleOnTop(pane);
@@ -579,7 +640,7 @@ public class CardMakerController {
         return nodes;
     }
 
-    private Node createNodeForElement(CardElement el, Map<String, String> currentRecord, FontElement fontConfig, ContainerElement.LayoutType parentLayout, ContainerElement.Alignment parentAlignment, boolean forFinalDesign) {
+    private Node createNodeForElement(CardElement el, Map<String, String> currentRecord, FontElement fontConfig, ContainerElement.LayoutType parentLayout, ContainerElement.Alignment parentAlignment, boolean forFinalDesign, boolean isLocked) {
         Node node;
         boolean isPositional = parentLayout == null || parentLayout == ContainerElement.LayoutType.POSITIONAL;
 
@@ -724,7 +785,7 @@ public class CardMakerController {
             ce.backgroundColorProperty().addListener((obs, old, newVal) -> updatePaneStyle(pane, newVal, ce.getAlpha(), forFinalDesign));
             ce.alphaProperty().addListener((obs, old, newVal) -> updatePaneStyle(pane, ce.getBackgroundColor(), newVal.doubleValue(), forFinalDesign));
 
-            if (!forFinalDesign) {
+            if (!forFinalDesign && (!isLocked || el instanceof ContainerElement)) {
                 makeResizable(pane, ce);
             }
 
@@ -761,7 +822,7 @@ public class CardMakerController {
             return null;
         }
 
-        if (!forFinalDesign) {
+        if (!forFinalDesign && (!isLocked || el instanceof ContainerElement)) {
             makeDraggable(node, el);
         }
         node.getProperties().put("cardElement", el);
@@ -1267,6 +1328,10 @@ public class CardMakerController {
             HBox spacingBox = createSliderWithNumericField(ce.spacingProperty(), 0, 100);
             addManagedListener(ce.spacingProperty(), (obs, old, newVal) -> renderTemplate());
 
+            CheckBox lockedBox = new CheckBox("Locked (Children non-editable)");
+            lockedBox.selectedProperty().bindBidirectional(ce.lockedProperty());
+            addManagedListener(ce.lockedProperty(), (obs, old, newVal) -> renderTemplate());
+
             propertiesPane.getChildren().addAll(
                 new Label("Width"), widthBox,
                 new Label("Height"), heightBox,
@@ -1275,7 +1340,8 @@ public class CardMakerController {
                 new Label("Background Color"), colorPicker,
                 new Label("Layout Type"), layoutBox,
                 new Label("Alignment"), alignBox,
-                new Label("Spacing"), spacingBox
+                new Label("Spacing"), spacingBox,
+                lockedBox
             );
         } else if (el instanceof IconElement ice) {
             TextField valueField = new TextField(ice.getValue());
@@ -1985,8 +2051,55 @@ public class CardMakerController {
     }
 
     @FXML
+    void handleSettings(ActionEvent event) {
+        Dialog<AppSettings> dialog = new Dialog<>();
+        dialog.setTitle("Settings");
+        dialog.setHeaderText("Global Application Settings");
+
+        ButtonType saveButtonType = new ButtonType("Save", ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().addAll(saveButtonType, ButtonType.CANCEL);
+
+        GridPane grid = new GridPane();
+        grid.setHgap(10);
+        grid.setVgap(10);
+        grid.setPadding(new Insets(20, 150, 10, 10));
+
+        TextField pathField = new TextField();
+        pathField.setPrefWidth(300);
+        pathField.setText(settings.getLastOpenedDeckPath() != null ? settings.getLastOpenedDeckPath() : "");
+
+        Button browseButton = new Button("Browse");
+        browseButton.setOnAction(e -> {
+            FileChooser fileChooser = new FileChooser();
+            fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("CardMaker Files", "*.cm"));
+            File file = fileChooser.showOpenDialog(dialog.getDialogPane().getScene().getWindow());
+            if (file != null) {
+                pathField.setText(file.getAbsolutePath());
+            }
+        });
+
+        grid.add(new Label("Last Opened/Saved Deck:"), 0, 0);
+        grid.add(pathField, 1, 0);
+        grid.add(browseButton, 2, 0);
+
+        dialog.getDialogPane().setContent(grid);
+
+        dialog.setResultConverter(dialogButton -> {
+            if (dialogButton == saveButtonType) {
+                settings.setLastOpenedDeckPath(pathField.getText().isEmpty() ? null : pathField.getText());
+                return settings;
+            }
+            return null;
+        });
+
+        Optional<AppSettings> result = dialog.showAndWait();
+        result.ifPresent(s -> saveSettings());
+    }
+
+    @FXML
     void handleExit(ActionEvent event) {
         saveTempDeck();
+        saveSettings();
         javafx.application.Platform.exit();
     }
 
@@ -2068,6 +2181,26 @@ public class CardMakerController {
         }
     }
 
+    private void loadSettings() {
+        try {
+            settings = DeckStorage.loadSettings();
+            if (settings.getLastOpenedDeckPath() != null) {
+                lastOpenedDirectory = new File(settings.getLastOpenedDeckPath()).getParentFile();
+            }
+        } catch (IOException e) {
+            System.err.println("Failed to load settings: " + e.getMessage());
+            settings = new AppSettings();
+        }
+    }
+
+    void saveSettings() {
+        try {
+            DeckStorage.saveSettings(settings);
+        } catch (IOException e) {
+            System.err.println("Failed to save settings: " + e.getMessage());
+        }
+    }
+
     private void applyTemplate(CardTemplate template) {
         this.currentTemplate = template;
         setupTemplateListeners();
@@ -2111,22 +2244,30 @@ public class CardMakerController {
         fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("CardMaker Files", "*.cm"));
         File file = fileChooser.showOpenDialog(propertiesPane.getScene().getWindow());
         if (file != null) {
-            try {
-                lastOpenedDirectory = file.getParentFile();
-                CardTemplate template = DeckStorage.load(file);
-                currentFile = file;
-                applyTemplate(template);
-            } catch (IOException e) {
-                Alert alert = new Alert(Alert.AlertType.ERROR);
-                alert.setContentText("Error loading deck: " + e.getMessage());
-                alert.show();
-            }
+            loadDeck(file);
+        }
+    }
+
+    private void loadDeck(File file) {
+        try {
+            lastOpenedDirectory = file.getParentFile();
+            CardTemplate template = DeckStorage.load(file);
+            currentFile = file;
+            settings.setLastOpenedDeckPath(file.getAbsolutePath());
+            saveSettings();
+            applyTemplate(template);
+        } catch (IOException e) {
+            Alert alert = new Alert(Alert.AlertType.ERROR);
+            alert.setContentText("Error loading deck: " + e.getMessage());
+            alert.show();
         }
     }
 
     private void saveToFile(File file) {
         try {
             DeckStorage.save(currentTemplate, file);
+            settings.setLastOpenedDeckPath(file.getAbsolutePath());
+            saveSettings();
         } catch (IOException e) {
             Alert alert = new Alert(Alert.AlertType.ERROR);
             alert.setContentText("Error saving deck: " + e.getMessage());
