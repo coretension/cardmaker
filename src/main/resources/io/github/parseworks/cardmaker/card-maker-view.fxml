@@ -9,42 +9,83 @@
 
 <BorderPane xmlns:fx="http://javafx.com/fxml" fx:controller="io.github.parseworks.cardmaker.CardMakerController">
     <top>
-        <MenuBar>
-            <Menu text="File">
-                <MenuItem text="New Deck" onAction="#handleNewDeck"/>
-                <MenuItem text="Open Deck" onAction="#handleOpenDeck"/>
-                <MenuItem text="Save Deck" onAction="#handleSaveDeck"/>
-                <MenuItem text="Save Deck As..." onAction="#handleSaveDeckAs"/>
-                <SeparatorMenuItem/>
-                <MenuItem text="Load CSV" onAction="#handleLoadCsv"/>
-                <MenuItem text="View CSV Data" onAction="#handleViewData"/>
-                <MenuItem text="Print Deck" onAction="#handlePrintDeck"/>
-                <MenuItem text="Export to PDF (CMYK)" onAction="#handleExportPdf"/>
-                <SeparatorMenuItem/>
-                <MenuItem text="Settings" onAction="#handleSettings"/>
-                <SeparatorMenuItem/>
-                <MenuItem text="Exit" onAction="#handleExit"/>
-            </Menu>
-            <Menu text="View">
-                <CheckMenuItem text="Preview Mode" onAction="#handleTogglePreviewMode" accelerator="Shortcut+P"/>
-                <CheckMenuItem text="Show Clipped Content" onAction="#handleToggleShowClippedContent"/>
-                <SeparatorMenuItem/>
-                <MenuItem text="Zoom In" onAction="#handleZoomIn" accelerator="Shortcut+EQUALS"/>
-                <MenuItem text="Zoom Out" onAction="#handleZoomOut" accelerator="Shortcut+MINUS"/>
-                <MenuItem text="Reset Zoom" onAction="#handleResetZoom" accelerator="Shortcut+0"/>
-            </Menu>
-            <Menu text="Insert">
-                <MenuItem text="Add Text" onAction="#handleAddText"/>
-                <MenuItem text="Add Image" onAction="#handleAddImage"/>
-                <MenuItem text="Add Icons" onAction="#handleAddIcon"/>
-                <MenuItem text="Add Condition" onAction="#handleAddCondition"/>
-                <MenuItem text="Add Container" onAction="#handleAddContainer"/>
-                <MenuItem text="Add Font Config" onAction="#handleAddFont"/>
-                <SeparatorMenuItem/>
-                <MenuItem text="Manage Icon Library" onAction="#handleManageIconLibrary"/>
-                <MenuItem text="Manage Font Library" onAction="#handleManageFontLibrary"/>
-            </Menu>
-        </MenuBar>
+        <VBox>
+            <MenuBar>
+                <Menu text="File">
+                    <MenuItem text="New Deck" onAction="#handleNewDeck"/>
+                    <MenuItem text="Open Deck" onAction="#handleOpenDeck"/>
+                    <MenuItem text="Save Deck" onAction="#handleSaveDeck"/>
+                    <MenuItem text="Save Deck As..." onAction="#handleSaveDeckAs"/>
+                    <SeparatorMenuItem/>
+                    <MenuItem text="Load CSV" onAction="#handleLoadCsv"/>
+                    <MenuItem text="View CSV Data" onAction="#handleViewData"/>
+                    <MenuItem text="Print Deck" onAction="#handlePrintDeck"/>
+                    <MenuItem text="Export to PDF (CMYK)" onAction="#handleExportPdf"/>
+                    <SeparatorMenuItem/>
+                    <MenuItem text="Settings" onAction="#handleSettings"/>
+                    <SeparatorMenuItem/>
+                    <MenuItem text="Exit" onAction="#handleExit"/>
+                </Menu>
+                <Menu text="View">
+                    <CheckMenuItem fx:id="previewMenuItem" text="Preview Mode" onAction="#handleTogglePreviewMode" accelerator="Shortcut+P"/>
+                    <CheckMenuItem text="Show Clipped Content" onAction="#handleToggleShowClippedContent"/>
+                    <SeparatorMenuItem/>
+                    <MenuItem text="Zoom In" onAction="#handleZoomIn" accelerator="Shortcut+EQUALS"/>
+                    <MenuItem text="Zoom Out" onAction="#handleZoomOut" accelerator="Shortcut+MINUS"/>
+                    <MenuItem text="Reset Zoom" onAction="#handleResetZoom" accelerator="Shortcut+0"/>
+                </Menu>
+                <Menu text="Insert">
+                    <MenuItem text="Add Text" onAction="#handleAddText"/>
+                    <MenuItem text="Add Image" onAction="#handleAddImage"/>
+                    <MenuItem text="Add Icons" onAction="#handleAddIcon"/>
+                    <MenuItem text="Add Condition" onAction="#handleAddCondition"/>
+                    <MenuItem text="Add Container" onAction="#handleAddContainer"/>
+                    <MenuItem text="Add Font Config" onAction="#handleAddFont"/>
+                    <SeparatorMenuItem/>
+                    <MenuItem text="Manage Icon Library" onAction="#handleManageIconLibrary"/>
+                    <MenuItem text="Manage Font Library" onAction="#handleManageFontLibrary"/>
+                </Menu>
+            </MenuBar>
+            <ToolBar>
+                <Button onAction="#handleNewDeck">
+                    <tooltip><Tooltip text="New Deck"/></tooltip>
+                    <graphic>
+                        <Label text="📄" style="-fx-font-size: 1.2em;"/>
+                    </graphic>
+                </Button>
+                <Button onAction="#handleOpenDeck">
+                    <tooltip><Tooltip text="Open Deck"/></tooltip>
+                    <graphic>
+                        <Label text="📂" style="-fx-font-size: 1.2em;"/>
+                    </graphic>
+                </Button>
+                <Button onAction="#handleSaveDeck">
+                    <tooltip><Tooltip text="Save Deck"/></tooltip>
+                    <graphic>
+                        <Label text="💾" style="-fx-font-size: 1.2em;"/>
+                    </graphic>
+                </Button>
+                <Separator/>
+                <Button text="+Text" onAction="#handleAddText">
+                    <tooltip><Tooltip text="Add Text Element"/></tooltip>
+                </Button>
+                <Button text="+Img" onAction="#handleAddImage">
+                    <tooltip><Tooltip text="Add Image Element"/></tooltip>
+                </Button>
+                <Button text="+Icon" onAction="#handleAddIcon">
+                    <tooltip><Tooltip text="Add Icon Element"/></tooltip>
+                </Button>
+                <Button text="+Box" onAction="#handleAddContainer">
+                    <tooltip><Tooltip text="Add Container"/></tooltip>
+                </Button>
+                <Separator/>
+                <ToggleButton fx:id="previewToolbarBtn" text="Preview" onAction="#handleTogglePreviewMode"/>
+                <Separator/>
+                <Button onAction="#handleZoomOut" text="-"/>
+                <Label fx:id="zoomToolbarLabel" text="100%" minWidth="40" alignment="CENTER"/>
+                <Button onAction="#handleZoomIn" text="+"/>
+            </ToolBar>
+        </VBox>
     </top>
     <left>
         <VBox spacing="10" prefWidth="200" style="-fx-background-color: #eee;">
@@ -96,4 +137,12 @@
             </HBox>
         </VBox>
     </right>
+    <bottom>
+        <HBox spacing="10" style="-fx-background-color: #ddd; -fx-padding: 3 10 3 10; -fx-border-color: #ccc; -fx-border-width: 1 0 0 0;" alignment="CENTER_LEFT">
+            <Label fx:id="statusLabel" text="Ready"/>
+            <Pane HBox.hgrow="ALWAYS"/>
+            <Separator orientation="VERTICAL"/>
+            <Label fx:id="cursorPosLabel" text="X: 0, Y: 0"/>
+        </HBox>
+    </bottom>
 </BorderPane>
