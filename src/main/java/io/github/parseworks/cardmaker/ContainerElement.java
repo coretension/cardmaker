@@ -2,8 +2,6 @@ package io.github.parseworks.cardmaker;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import javafx.beans.property.*;
-import javafx.collections.FXCollections;
-import javafx.collections.ObservableList;
 
 public class ContainerElement extends ParentCardElement {
     public enum LayoutType { POSITIONAL, FLOW, VERTICAL, HORIZONTAL, STACK }

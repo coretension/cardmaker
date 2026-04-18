@@ -1,7 +1,10 @@
 package io.github.parseworks.cardmaker;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import javafx.beans.property.*;
+import javafx.beans.property.DoubleProperty;
+import javafx.beans.property.SimpleDoubleProperty;
+import javafx.beans.property.SimpleStringProperty;
+import javafx.beans.property.StringProperty;
 
 public class TextElement extends CardElement {
     private final StringProperty text = new SimpleStringProperty("Text");

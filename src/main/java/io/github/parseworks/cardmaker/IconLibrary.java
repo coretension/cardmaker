@@ -3,6 +3,7 @@ package io.github.parseworks.cardmaker;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableMap;
+
 import java.util.Map;
 
 public class IconLibrary {

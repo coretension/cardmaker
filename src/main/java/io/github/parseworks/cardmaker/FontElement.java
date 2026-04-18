@@ -2,8 +2,8 @@ package io.github.parseworks.cardmaker;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import javafx.beans.property.*;
-import javafx.scene.text.FontWeight;
 import javafx.scene.text.FontPosture;
+import javafx.scene.text.FontWeight;
 
 public class FontElement extends CardElement {
     private final StringProperty fontFamily = new SimpleStringProperty("Arial");
