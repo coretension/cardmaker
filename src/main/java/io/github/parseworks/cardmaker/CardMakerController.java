@@ -542,7 +542,17 @@ public class CardMakerController {
         cardCanvas.getChildren().clear();
         double bleedPx = currentTemplate.getBleedMm() * (CardDimension.getDpi() / 25.4);
         
-        // Add bleed guide
+        Map<String, String> currentRecord = (currentRecordIndex >= 0 && currentRecordIndex < csvData.size()) 
+                ? csvData.get(currentRecordIndex) : null;
+
+        Pane contentPane = new Pane();
+        contentPane.setLayoutX(bleedPx);
+        contentPane.setLayoutY(bleedPx);
+        cardCanvas.getChildren().add(contentPane);
+
+        renderElements(currentTemplate.getElements(), contentPane, currentRecord, null, ContainerElement.LayoutType.POSITIONAL, ContainerElement.Alignment.LEFT, false, false);
+        
+        // Add bleed guide last so it's always visible
         if (bleedPx > 0 && !previewMode) {
             javafx.scene.shape.Rectangle bleedGuide = new javafx.scene.shape.Rectangle(bleedPx, bleedPx, 
                     currentTemplate.getDimension().getWidthPx(), currentTemplate.getDimension().getHeightPx());
@@ -554,15 +564,6 @@ public class CardMakerController {
             cardCanvas.getChildren().add(bleedGuide);
         }
 
-        Map<String, String> currentRecord = (currentRecordIndex >= 0 && currentRecordIndex < csvData.size()) 
-                ? csvData.get(currentRecordIndex) : null;
-
-        Pane contentPane = new Pane();
-        contentPane.setLayoutX(bleedPx);
-        contentPane.setLayoutY(bleedPx);
-        cardCanvas.getChildren().add(contentPane);
-
-        renderElements(currentTemplate.getElements(), contentPane, currentRecord, null, ContainerElement.LayoutType.POSITIONAL, ContainerElement.Alignment.LEFT, false, false);
         highlightOnCanvas(getSelectedElement());
     }
 
