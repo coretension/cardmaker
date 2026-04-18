@@ -1,13 +1,8 @@
 package io.github.parseworks.cardmaker;
 
-import org.junit.jupiter.api.Test;
-import static org.junit.jupiter.api.Assertions.*;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.HashMap;
-import java.util.Map;
 import com.opencsv.exceptions.CsvException;
+import org.junit.jupiter.api.Test;
+
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -16,6 +11,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 public class DataMergerTest {
 

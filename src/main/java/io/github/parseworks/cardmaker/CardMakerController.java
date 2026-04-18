@@ -23,6 +23,7 @@ import javafx.scene.text.FontPosture;
 import javafx.scene.text.FontWeight;
 import javafx.scene.text.Text;
 import javafx.stage.FileChooser;
+import javafx.stage.Stage;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
@@ -45,6 +46,7 @@ public class CardMakerController {
     @FXML private Label sizeLabel;
     @FXML private Label cursorPosLabel;
     @FXML private Label coordinatesLabel;
+    @FXML private Label statusLabel;
 
     private final Map<CardElement, ChangeListener<Number>> xListeners = new HashMap<>();
     private final Map<CardElement, ChangeListener<Number>> yListeners = new HashMap<>();
@@ -69,6 +71,7 @@ public class CardMakerController {
         updateCanvasSize();
         updateSizeLabel();
         setupZoomListeners();
+        updateTitleAndStatus();
         
         if (settings.getLastOpenedDeckPath() != null) {
             File lastFile = new File(settings.getLastOpenedDeckPath());
@@ -1548,9 +1551,11 @@ public class CardMakerController {
         result.ifPresent(dimension -> {
             currentTemplate = new CardTemplate();
             currentTemplate.setDimension(dimension);
+            currentFile = null;
             setupTemplateListeners();
             updateCanvasSize();
             renderTemplate();
+            updateTitleAndStatus();
         });
     }
 
@@ -2378,6 +2383,7 @@ public class CardMakerController {
             settings.setLastOpenedDeckPath(file.getAbsolutePath());
             saveSettings();
             applyTemplate(template);
+            updateTitleAndStatus();
         } catch (IOException e) {
             Alert alert = new Alert(Alert.AlertType.ERROR);
             alert.setContentText("Error loading deck: " + e.getMessage());
@@ -2388,8 +2394,10 @@ public class CardMakerController {
     private void saveToFile(File file) {
         try {
             DeckStorage.save(currentTemplate, file);
+            currentFile = file;
             settings.setLastOpenedDeckPath(file.getAbsolutePath());
             saveSettings();
+            updateTitleAndStatus();
         } catch (IOException e) {
             Alert alert = new Alert(Alert.AlertType.ERROR);
             alert.setContentText("Error saving deck: " + e.getMessage());
@@ -2399,5 +2407,17 @@ public class CardMakerController {
 
     private void updateRecordLabel() {
         recordLabel.setText((currentRecordIndex + 1) + " / " + csvData.size());
+    }
+
+    /**
+     * Updates the main window title and status bar label to show the current deck name.
+     */
+    private void updateTitleAndStatus() {
+        String deckName = (currentFile != null) ? currentFile.getName() : "Unsaved Deck";
+        statusLabel.setText("Deck: " + deckName);
+
+        if (propertiesPane.getScene() != null && propertiesPane.getScene().getWindow() instanceof Stage stage) {
+            stage.setTitle("CardMaker - " + deckName);
+        }
     }
 }
