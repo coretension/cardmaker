@@ -44,6 +44,7 @@ public class CardMakerController {
     @FXML private Pane cardCanvas;
     @FXML private VBox propertiesPane;
     @FXML private Label recordLabel;
+    @FXML private StackPane displayStack;
     @FXML private StackPane canvasContainer;
     @FXML private Label zoomLabel;
     @FXML private Label zoomToolbarLabel;
@@ -490,6 +491,11 @@ public class CardMakerController {
                     handle.setVisible(true);
                     handle.toFront();
                 }
+                
+                // CRITICAL: Ensure labels in displayStack are NOT obscured by elements or their children
+                if (sizeLabel != null) sizeLabel.toFront();
+                if (zoomLabel != null) zoomLabel.toFront();
+                if (coordinatesLabel != null) coordinatesLabel.toFront();
             } else if (found.getParent() instanceof Pane parentPane) {
                 // If it's a child of a layout pane (HBox/VBox/FlowPane), 
                 // we might want to highlight the parent if it's a ContainerElement?
@@ -581,6 +587,11 @@ public class CardMakerController {
         }
 
         highlightOnCanvas(getSelectedElement());
+        
+        // Ensure status labels in displayStack are always on top
+        if (sizeLabel != null) sizeLabel.toFront();
+        if (zoomLabel != null) zoomLabel.toFront();
+        if (coordinatesLabel != null) coordinatesLabel.toFront();
     }
 
     public void renderElementsExternal(ObservableList<CardElement> elements, Pane targetPane, Map<String, String> currentRecord, boolean forFinalDesign) {
@@ -1286,7 +1297,6 @@ public class CardMakerController {
                     pathField.setText(file.getAbsolutePath());
                 }
             });
-            propertiesPane.getChildren().addAll(new Label("Image Path"), pathField, browseBtn);
 
             addSectionLabel("Dimensions");
             HBox widthBox = createSliderWithNumericField(ie.widthProperty(), 10, 500);
@@ -1327,6 +1337,7 @@ public class CardMakerController {
                                             lockAspectBox,
                                             allowOverflowBox);
         } else if (el instanceof ContainerElement ce) {
+            addSectionLabel("Dimensions");
             HBox widthBox = createSliderWithNumericField(ce.widthProperty(), 10, 500);
             addManagedListener(ce.widthProperty(), (obs, old, newVal) -> {
                 if (!isUpdatingOtherAxis && ce.isLockAspectRatio() && old.doubleValue() > 0) {
@@ -1350,6 +1361,7 @@ public class CardMakerController {
             CheckBox lockAspectBox = new CheckBox("Lock Aspect Ratio");
             lockAspectBox.selectedProperty().bindBidirectional(ce.lockAspectRatioProperty());
 
+            addSectionLabel("Appearance");
             HBox alphaBox = createSliderWithNumericField(ce.alphaProperty(), 0.0, 1.0);
             ColorPicker colorPicker = new ColorPicker(Color.TRANSPARENT);
             colorPicker.setStyle("-fx-color-label-visible: true;");
@@ -1363,6 +1375,7 @@ public class CardMakerController {
                 ce.setBackgroundColor(toHexString(colorPicker.getValue()));
             });
 
+            addSectionLabel("Layout");
             ComboBox<ContainerElement.LayoutType> layoutBox = new ComboBox<>(javafx.collections.FXCollections.observableArrayList(ContainerElement.LayoutType.values()));
             layoutBox.valueProperty().bindBidirectional(ce.layoutTypeProperty());
             addManagedListener(ce.layoutTypeProperty(), (obs, old, newVal) -> {
@@ -2265,7 +2278,8 @@ public class CardMakerController {
     }
 
     private void setupZoomListeners() {
-        canvasContainer.addEventFilter(ScrollEvent.SCROLL, event -> {
+        StackPane target = displayStack != null ? displayStack : canvasContainer;
+        target.addEventFilter(ScrollEvent.SCROLL, event -> {
             if (event.isControlDown() || event.isShortcutDown()) {
                 if (event.getDeltaY() > 0) {
                     zoomLevel *= 1.1;

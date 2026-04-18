@@ -97,45 +97,49 @@
         </VBox>
     </left>
     <center>
-        <ScrollPane fitToHeight="true" fitToWidth="true" style="-fx-background-color: #999;">
-            <StackPane fx:id="canvasContainer">
-                <Group>
-                    <Pane fx:id="cardCanvas" pickOnBounds="true" style="-fx-background-color: white; -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.4), 10, 0, 0, 0);"/>
-                </Group>
-                <Label fx:id="sizeLabel" text="0x0 mm" StackPane.alignment="BOTTOM_LEFT" mouseTransparent="true" style="-fx-background-color: rgba(0,0,0,0.5); -fx-text-fill: white; -fx-padding: 5; -fx-background-radius: 5;">
-                    <StackPane.margin>
-                        <Insets bottom="10" left="10"/>
-                    </StackPane.margin>
-                </Label>
-                <Label fx:id="zoomLabel" text="100%" StackPane.alignment="BOTTOM_RIGHT" mouseTransparent="true" style="-fx-background-color: rgba(0,0,0,0.5); -fx-text-fill: white; -fx-padding: 5; -fx-background-radius: 5;">
-                    <StackPane.margin>
-                        <Insets bottom="10" right="10"/>
-                    </StackPane.margin>
-                </Label>
-                <Label fx:id="coordinatesLabel" text="X: 0, Y: 0" visible="false" StackPane.alignment="TOP_RIGHT" mouseTransparent="true" style="-fx-background-color: rgba(0,0,0,0.5); -fx-text-fill: white; -fx-padding: 5; -fx-background-radius: 5;">
-                    <StackPane.margin>
-                        <Insets top="10" right="10"/>
-                    </StackPane.margin>
-                </Label>
-            </StackPane>
-        </ScrollPane>
+        <StackPane fx:id="displayStack">
+            <ScrollPane fitToHeight="true" fitToWidth="true" style="-fx-background-color: #999;">
+                <StackPane fx:id="canvasContainer">
+                    <Group>
+                        <Pane fx:id="cardCanvas" pickOnBounds="true" style="-fx-background-color: white; -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.4), 10, 0, 0, 0);"/>
+                    </Group>
+                </StackPane>
+            </ScrollPane>
+            <Label fx:id="sizeLabel" text="0x0 mm" StackPane.alignment="BOTTOM_LEFT" mouseTransparent="true" style="-fx-background-color: rgba(0,0,0,0.5); -fx-text-fill: white; -fx-padding: 5; -fx-background-radius: 5;">
+                <StackPane.margin>
+                    <Insets bottom="10" left="10"/>
+                </StackPane.margin>
+            </Label>
+            <Label fx:id="zoomLabel" text="100%" StackPane.alignment="BOTTOM_RIGHT" mouseTransparent="true" style="-fx-background-color: rgba(0,0,0,0.5); -fx-text-fill: white; -fx-padding: 5; -fx-background-radius: 5;">
+                <StackPane.margin>
+                    <Insets bottom="10" right="10"/>
+                </StackPane.margin>
+            </Label>
+            <Label fx:id="coordinatesLabel" text="X: 0, Y: 0" visible="false" StackPane.alignment="TOP_RIGHT" mouseTransparent="true" style="-fx-background-color: rgba(0,0,0,0.5); -fx-text-fill: white; -fx-padding: 5; -fx-background-radius: 5;">
+                <StackPane.margin>
+                    <Insets top="10" right="10"/>
+                </StackPane.margin>
+            </Label>
+        </StackPane>
     </center>
     <right>
-        <VBox spacing="10" prefWidth="250" style="-fx-background-color: #eee;">
-            <padding>
-                <Insets top="10" right="10" bottom="10" left="10"/>
-            </padding>
-            <Label text="Properties" style="-fx-font-weight: bold;"/>
-            <VBox fx:id="propertiesPane" spacing="10"/>
-            <Separator/>
-            <Label text="Data Preview" style="-fx-font-weight: bold;"/>
-            <HBox spacing="5" alignment="CENTER">
-                <Button text="&lt;" onAction="#handlePrevRecord"/>
-                <Label fx:id="recordLabel" text="0 / 0"/>
-                <Button text="&gt;" onAction="#handleNextRecord"/>
-                <Button text="View" onAction="#handleViewData"/>
-            </HBox>
-        </VBox>
+        <ScrollPane fitToWidth="true" hbarPolicy="NEVER" prefWidth="250" style="-fx-background-color: #eee;">
+            <VBox spacing="10">
+                <padding>
+                    <Insets top="10" right="10" bottom="10" left="10"/>
+                </padding>
+                <Label text="Properties" style="-fx-font-weight: bold;"/>
+                <VBox fx:id="propertiesPane" spacing="10"/>
+                <Separator/>
+                <Label text="Data Preview" style="-fx-font-weight: bold;"/>
+                <HBox spacing="5" alignment="CENTER">
+                    <Button text="&lt;" onAction="#handlePrevRecord"/>
+                    <Label fx:id="recordLabel" text="0 / 0"/>
+                    <Button text="&gt;" onAction="#handleNextRecord"/>
+                    <Button text="View" onAction="#handleViewData"/>
+                </HBox>
+            </VBox>
+        </ScrollPane>
     </right>
     <bottom>
         <HBox spacing="10" style="-fx-background-color: #ddd; -fx-padding: 3 10 3 10; -fx-border-color: #ccc; -fx-border-width: 1 0 0 0;" alignment="CENTER_LEFT">
