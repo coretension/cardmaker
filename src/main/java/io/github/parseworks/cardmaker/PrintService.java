@@ -26,7 +26,6 @@ public class PrintService {
 
     private final CardTemplate template;
     private final List<Map<String, String>> csvData;
-    private final DataMerger dataMerger;
     private final CardMakerController controller;
 
     /**
@@ -39,7 +38,6 @@ public class PrintService {
     public PrintService(CardTemplate template, List<Map<String, String>> csvData, DataMerger dataMerger, CardMakerController controller) {
         this.template = template;
         this.csvData = csvData;
-        this.dataMerger = dataMerger;
         this.controller = controller;
     }
 
@@ -186,9 +184,7 @@ public class PrintService {
         Group zoomGroup = new Group(pagesContainer);
         scrollPane.setContent(zoomGroup);
 
-        zoomSlider.valueProperty().addListener((obs, oldVal, newVal) -> {
-            zoomLabel.setText(String.format("Zoom: %.0f%%", newVal.doubleValue() * 100));
-        });
+        zoomSlider.valueProperty().addListener((obs, oldVal, newVal) -> zoomLabel.setText(String.format("Zoom: %.0f%%", newVal.doubleValue() * 100)));
 
         HBox zoomControls = new HBox(10, new Label("Zoom:"), zoomSlider, zoomLabel);
         zoomControls.setAlignment(Pos.CENTER);

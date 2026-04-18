@@ -38,7 +38,7 @@ public class DataMerger {
             List<String[]> lines = reader.readAll();
             if (lines.isEmpty()) return new CsvResult(new ArrayList<>(), new ArrayList<>());
 
-            List<String> headers = List.of(lines.get(0));
+            List<String> headers = List.of(lines.getFirst());
             List<Map<String, String>> records = new ArrayList<>();
 
             for (int i = 1; i < lines.size(); i++) {
@@ -99,7 +99,7 @@ public class DataMerger {
 
                 if (allRows.isEmpty()) return new CsvResult(new ArrayList<>(), new ArrayList<>());
 
-                List<String> headers = allRows.get(0);
+                List<String> headers = allRows.getFirst();
                 List<Map<String, String>> records = new ArrayList<>();
                 for (int i = 1; i < allRows.size(); i++) {
                     List<String> row = allRows.get(i);

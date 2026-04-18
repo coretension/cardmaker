@@ -27,8 +27,8 @@ public class ImageElementOverflowTest {
             CardTemplate loaded = DeckStorage.load(tempFile);
             assertEquals(1, loaded.getElements().size());
             
-            CardElement el = loaded.getElements().get(0);
-            assertTrue(el instanceof ImageElement);
+            CardElement el = loaded.getElements().getFirst();
+            assertInstanceOf(ImageElement.class, el);
             ImageElement loadedImage = (ImageElement) el;
             assertEquals("test.png", loadedImage.getImagePath());
             assertTrue(loadedImage.isAllowOverflow());
@@ -38,7 +38,7 @@ public class ImageElementOverflowTest {
             DeckStorage.save(loaded, tempFile);
             
             CardTemplate loaded2 = DeckStorage.load(tempFile);
-            assertFalse(((ImageElement)loaded2.getElements().get(0)).isAllowOverflow());
+            assertFalse(((ImageElement)loaded2.getElements().getFirst()).isAllowOverflow());
             
         } finally {
             tempFile.delete();
