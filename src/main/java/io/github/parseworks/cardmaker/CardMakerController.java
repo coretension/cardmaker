@@ -780,6 +780,12 @@ public class CardMakerController {
                     flowPane.vgapProperty().bind(ce.spacingProperty());
                     pane = flowPane;
                     break;
+                case STACK:
+                    StackPane stackPane = new StackPane();
+                    stackPane.setAlignment(mapAlignmentToPos(ce.getAlignment(), false));
+                    ce.alignmentProperty().addListener((obs, old, newVal) -> stackPane.setAlignment(mapAlignmentToPos(newVal, false)));
+                    pane = stackPane;
+                    break;
                 case POSITIONAL:
                 default:
                     pane = new Pane();
@@ -875,19 +881,11 @@ public class CardMakerController {
 
     private javafx.geometry.Pos mapAlignmentToPos(ContainerElement.Alignment alignment, boolean vertical) {
         if (alignment == null) alignment = ContainerElement.Alignment.LEFT;
-        if (vertical) {
-            return switch (alignment) {
-                case LEFT -> javafx.geometry.Pos.TOP_LEFT;
-                case CENTER -> javafx.geometry.Pos.TOP_CENTER;
-                case RIGHT -> javafx.geometry.Pos.TOP_RIGHT;
-            };
-        } else {
-            return switch (alignment) {
-                case LEFT -> javafx.geometry.Pos.CENTER_LEFT;
-                case CENTER -> javafx.geometry.Pos.CENTER;
-                case RIGHT -> javafx.geometry.Pos.CENTER_RIGHT;
-            };
-        }
+        return switch (alignment) {
+            case LEFT -> vertical ? Pos.TOP_LEFT : Pos.CENTER_LEFT;
+            case CENTER -> vertical ? Pos.TOP_CENTER : Pos.CENTER;
+            case RIGHT -> vertical ? Pos.TOP_RIGHT : Pos.CENTER_RIGHT;
+        };
     }
 
     private javafx.scene.text.TextAlignment mapAlignmentToTextAlignment(ContainerElement.Alignment alignment) {
@@ -1323,7 +1321,7 @@ public class CardMakerController {
             ComboBox<ContainerElement.LayoutType> layoutBox = new ComboBox<>(javafx.collections.FXCollections.observableArrayList(ContainerElement.LayoutType.values()));
             layoutBox.valueProperty().bindBidirectional(ce.layoutTypeProperty());
             addManagedListener(ce.layoutTypeProperty(), (obs, old, newVal) -> {
-                if (newVal == ContainerElement.LayoutType.POSITIONAL && old != ContainerElement.LayoutType.POSITIONAL) {
+                if (newVal == ContainerElement.LayoutType.POSITIONAL && (old != ContainerElement.LayoutType.POSITIONAL && old != ContainerElement.LayoutType.STACK)) {
                     // Update children's x and y to their current layoutX and layoutY
                     // Since layout properties are managed by the container's layout manager,
                     // we need to find the actual nodes for each child and use their current layout positions.

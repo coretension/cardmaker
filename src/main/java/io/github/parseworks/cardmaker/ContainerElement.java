@@ -6,7 +6,7 @@ import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 
 public class ContainerElement extends ParentCardElement {
-    public enum LayoutType { POSITIONAL, FLOW, VERTICAL, HORIZONTAL }
+    public enum LayoutType { POSITIONAL, FLOW, VERTICAL, HORIZONTAL, STACK }
     public enum Alignment { LEFT, CENTER, RIGHT }
 
     private final DoubleProperty width = new SimpleDoubleProperty(100);

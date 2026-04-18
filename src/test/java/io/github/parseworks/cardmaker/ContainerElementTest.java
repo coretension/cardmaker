@@ -39,4 +39,10 @@ public class ContainerElementTest {
         assertEquals(ContainerElement.LayoutType.HORIZONTAL, ce.getLayoutType());
         assertEquals(ContainerElement.Alignment.RIGHT, ce.getAlignment());
     }
+    @Test
+    public void testStackLayout() {
+        ContainerElement ce = new ContainerElement();
+        ce.setLayoutType(ContainerElement.LayoutType.STACK);
+        assertEquals(ContainerElement.LayoutType.STACK, ce.getLayoutType());
+    }
 }
