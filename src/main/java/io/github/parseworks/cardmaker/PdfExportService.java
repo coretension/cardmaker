@@ -26,6 +26,12 @@ public class PdfExportService {
         this.controller = controller;
     }
 
+    /**
+     * Exports the current deck and data to a PDF file.
+     *
+     * @param file the destination PDF file
+     * @throws IOException if an error occurs during export
+     */
     public void exportToPdf(File file) throws IOException {
         double cardWidthMm = template.getDimension().getWidthMm();
         double cardHeightMm = template.getDimension().getHeightMm();
@@ -49,7 +55,7 @@ public class PdfExportService {
             for (Map<String, String> record : records) {
                 document.newPage();
                 
-                // Render card to image at high DPI
+                // Render card to image at high DPI (300)
                 BufferedImage cardImage = renderCardToImage(record, 300);
                 
                 com.lowagie.text.Image pdfImg = convertToCmykImage(cardImage);
@@ -66,6 +72,13 @@ public class PdfExportService {
         }
     }
 
+    /**
+     * Renders a single card to a BufferedImage at the specified DPI.
+     *
+     * @param record the data record for the card
+     * @param dpi the resolution for rendering
+     * @return the rendered image
+     */
     private BufferedImage renderCardToImage(Map<String, String> record, double dpi) {
         double bleedMm = template.getBleedMm();
         double widthPx = (template.getDimension().getWidthMm() + 2 * bleedMm) * dpi / 25.4;
@@ -100,7 +113,14 @@ public class PdfExportService {
         return SwingFXUtils.fromFXImage(snapshot, null);
     }
 
-    private com.lowagie.text.Image convertToCmykImage(BufferedImage rgbImage) throws Exception {
+    /**
+     * Converts an RGB BufferedImage to a CMYK com.lowagie.text.Image.
+     * Uses a simple RGB to CMYK conversion formula.
+     *
+     * @param rgbImage the source RGB image
+     * @return the converted CMYK image
+     */
+    private com.lowagie.text.Image convertToCmykImage(BufferedImage rgbImage) {
         int w = rgbImage.getWidth();
         int h = rgbImage.getHeight();
         
@@ -125,6 +145,10 @@ public class PdfExportService {
             }
         }
         
-        return com.lowagie.text.Image.getInstance(w, h, 4, 8, cmykData);
+        try {
+            return com.lowagie.text.Image.getInstance(w, h, 4, 8, cmykData);
+        } catch (com.lowagie.text.DocumentException e) {
+            throw new RuntimeException("Failed to create PDF image", e);
+        }
     }
 }

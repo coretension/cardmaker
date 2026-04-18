@@ -19,30 +19,43 @@ public class DeckStorage {
 
     static {
         SimpleModule module = new SimpleModule();
-        module.addSerializer(Property.class, new PropertySerializer());
+        // Use raw types for addSerializer to match Jackson expectations while keeping serializers generic
+        module.addSerializer(Property.class, (JsonSerializer) new PropertySerializer());
         module.addDeserializer(DoubleProperty.class, new DoublePropertyDeserializer());
         module.addDeserializer(StringProperty.class, new StringPropertyDeserializer());
         module.addDeserializer(IntegerProperty.class, new IntegerPropertyDeserializer());
         module.addDeserializer(BooleanProperty.class, new BooleanPropertyDeserializer());
-        module.addDeserializer(ObjectProperty.class, new ObjectPropertyDeserializer());
-        module.addSerializer(ObservableList.class, new ObservableListSerializer());
-        module.addDeserializer(ObservableList.class, new ObservableListDeserializer());
+        module.addDeserializer(ObjectProperty.class, (JsonDeserializer) new ObjectPropertyDeserializer());
+        module.addSerializer(ObservableList.class, (JsonSerializer) new ObservableListSerializer());
+        module.addDeserializer(ObservableList.class, (JsonDeserializer) new ObservableListDeserializer());
         mapper.registerModule(module);
         mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
     }
 
+    /**
+     * Saves a card template to a file.
+     */
     public static void save(CardTemplate template, File file) throws IOException {
         mapper.writerWithDefaultPrettyPrinter().writeValue(file, template);
     }
 
+    /**
+     * Loads a card template from a file.
+     */
     public static CardTemplate load(File file) throws IOException {
         return mapper.readValue(file, CardTemplate.class);
     }
 
+    /**
+     * Saves application settings.
+     */
     public static void saveSettings(AppSettings settings) throws IOException {
         mapper.writerWithDefaultPrettyPrinter().writeValue(getSettingsFile(), settings);
     }
 
+    /**
+     * Loads application settings.
+     */
     public static AppSettings loadSettings() throws IOException {
         File file = getSettingsFile();
         if (file.exists()) {
@@ -51,34 +64,48 @@ public class DeckStorage {
         return new AppSettings();
     }
 
+    /**
+     * Returns the file where settings are stored, ensuring parent directories exist.
+     */
     public static File getSettingsFile() {
         String userHome = System.getProperty("user.home");
         Path path = Paths.get(userHome, ".cardmaker", "settings.json");
         File file = path.toFile();
-        if (!file.getParentFile().exists()) {
-            file.getParentFile().mkdirs();
-        }
+        ensureParentExists(file);
         return file;
     }
 
+    /**
+     * Deep clones an object using JSON serialization.
+     */
     public static <T> T clone(T object, Class<T> clazz) throws IOException {
         String json = mapper.writeValueAsString(object);
         return mapper.readValue(json, clazz);
     }
 
+    /**
+     * Returns the file where the temporary deck is stored, ensuring parent directories exist.
+     */
     public static File getTempFile() {
         String userHome = System.getProperty("user.home");
         Path path = Paths.get(userHome, ".cardmaker", "temp_deck.json");
         File file = path.toFile();
-        if (!file.getParentFile().exists()) {
-            file.getParentFile().mkdirs();
-        }
+        ensureParentExists(file);
         return file;
     }
 
-    private static class PropertySerializer extends JsonSerializer<Property> {
+    private static void ensureParentExists(File file) {
+        File parent = file.getParentFile();
+        if (parent != null && !parent.exists()) {
+            if (!parent.mkdirs()) {
+                // We don't throw here to match original behavior but maybe we should log
+            }
+        }
+    }
+
+    private static class PropertySerializer extends JsonSerializer<Property<?>> {
         @Override
-        public void serialize(Property value, JsonGenerator gen, SerializerProvider serializers) throws IOException {
+        public void serialize(Property<?> value, JsonGenerator gen, SerializerProvider serializers) throws IOException {
             if (value == null || value.getValue() == null) {
                 gen.writeNull();
             } else {
@@ -115,37 +142,37 @@ public class DeckStorage {
         }
     }
 
-    private static class ObjectPropertyDeserializer extends JsonDeserializer<ObjectProperty> {
+    private static class ObjectPropertyDeserializer extends JsonDeserializer<ObjectProperty<?>> {
         @Override
-        public ObjectProperty deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
+        public ObjectProperty<?> deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
             JsonNode node = p.getCodec().readTree(p);
             if (node.isTextual()) {
                 String textValue = node.asText();
                 try {
-                    return new SimpleObjectProperty(ContainerElement.LayoutType.valueOf(textValue));
+                    return new SimpleObjectProperty<>(ContainerElement.LayoutType.valueOf(textValue));
                 } catch (IllegalArgumentException e0) {
                     try {
-                        return new SimpleObjectProperty(ContainerElement.Alignment.valueOf(textValue));
+                        return new SimpleObjectProperty<>(ContainerElement.Alignment.valueOf(textValue));
                     } catch (IllegalArgumentException e1a) {
                         try {
-                            return new SimpleObjectProperty(javafx.scene.text.FontWeight.valueOf(textValue));
+                            return new SimpleObjectProperty<>(javafx.scene.text.FontWeight.valueOf(textValue));
                         } catch (IllegalArgumentException e1) {
                             try {
-                                return new SimpleObjectProperty(javafx.scene.text.FontPosture.valueOf(textValue));
+                                return new SimpleObjectProperty<>(javafx.scene.text.FontPosture.valueOf(textValue));
                             } catch (IllegalArgumentException e2) {
-                                return new SimpleObjectProperty(textValue);
+                                return new SimpleObjectProperty<>(textValue);
                             }
                         }
                     }
                 }
             }
-            return new SimpleObjectProperty(node);
+            return new SimpleObjectProperty<>(node);
         }
     }
 
-    private static class ObservableListSerializer extends JsonSerializer<ObservableList> {
+    private static class ObservableListSerializer extends JsonSerializer<ObservableList<?>> {
         @Override
-        public void serialize(ObservableList value, JsonGenerator gen, SerializerProvider serializers) throws IOException {
+        public void serialize(ObservableList<?> value, JsonGenerator gen, SerializerProvider serializers) throws IOException {
             gen.writeStartArray();
             for (Object item : value) {
                 gen.writeObject(item);
@@ -154,9 +181,9 @@ public class DeckStorage {
         }
     }
 
-    private static class ObservableListDeserializer extends JsonDeserializer<ObservableList> {
+    private static class ObservableListDeserializer extends JsonDeserializer<ObservableList<CardElement>> {
         @Override
-        public ObservableList deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
+        public ObservableList<CardElement> deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
             List<CardElement> list = ctxt.readValue(p, mapper.getTypeFactory().constructCollectionType(List.class, CardElement.class));
             return FXCollections.observableArrayList(list);
         }

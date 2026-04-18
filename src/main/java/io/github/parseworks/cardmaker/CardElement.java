@@ -40,8 +40,16 @@ public abstract class CardElement {
     @JsonIgnore
     public StringProperty nameProperty() { return name; }
 
+    /**
+     * Checks if the element is enabled and should be rendered.
+     */
     public boolean isEnabled() { return enabled.get(); }
+    
+    /**
+     * Sets whether the element is enabled.
+     */
     public void setEnabled(boolean value) { enabled.set(value); }
+    
     @JsonIgnore
     public BooleanProperty enabledProperty() { return enabled; }
 }

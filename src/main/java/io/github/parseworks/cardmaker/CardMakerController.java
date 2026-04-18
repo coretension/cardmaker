@@ -43,7 +43,6 @@ public class CardMakerController {
     @FXML private ToggleButton previewToolbarBtn;
     @FXML private CheckMenuItem previewMenuItem;
     @FXML private Label sizeLabel;
-    @FXML private Label statusLabel;
     @FXML private Label cursorPosLabel;
     @FXML private Label coordinatesLabel;
 
@@ -93,14 +92,15 @@ public class CardMakerController {
                         setGraphic(null);
                         setContextMenu(null);
                     } else {
-                        final String icon;
-                        if (item instanceof TextElement) icon = "T";
-                        else if (item instanceof ImageElement) icon = "🖼";
-                        else if (item instanceof IconElement) icon = "⭐";
-                        else if (item instanceof ContainerElement) icon = "📦";
-                        else if (item instanceof FontElement) icon = "🔤";
-                        else if (item instanceof ConditionElement) icon = "❓";
-                        else icon = "📄";
+                        final String icon = switch (item) {
+                            case TextElement te -> "T";
+                            case ImageElement ie -> "🖼";
+                            case IconElement ice -> "⭐";
+                            case ContainerElement ce -> "📦";
+                            case FontElement fe -> "🔤";
+                            case ConditionElement ce2 -> "❓";
+                            default -> "📄";
+                        };
                         
                         Label iconLabel = new Label(icon);
                         iconLabel.setMinWidth(20);
@@ -422,40 +422,55 @@ public class CardMakerController {
         });
     }
 
+    /**
+     * Rebuilds the element tree view from the current template.
+     * Preserves selection and expansion state where possible.
+     */
     private void rebuildTree() {
         CardElement selected = getSelectedElement();
-        if (elementTreeView.getRoot() == null) {
-            TreeItem<CardElement> root = new TreeItem<>(new ContainerElement("Root"));
-            elementTreeView.setRoot(root);
-            elementTreeView.setShowRoot(false);
-        }
+        TreeItem<CardElement> root = new TreeItem<>(null);
+        elementTreeView.setRoot(root);
+        elementTreeView.setShowRoot(false);
         
-        refreshTreeItems(elementTreeView.getRoot(), currentTemplate.getElements());
+        refreshTreeItems(root, currentTemplate.getElements());
+        
         if (selected != null) {
             selectElement(selected);
         }
     }
 
+    /**
+     * Refreshes the children of a tree item based on a list of card elements.
+     *
+     * @param parentItem the tree item to refresh
+     * @param elements   the list of card elements to display as children
+     */
     private void refreshTreeItems(TreeItem<CardElement> parentItem, ObservableList<CardElement> elements) {
-        // Simple strategy: rebuild if sizes differ or values differ
-        // For a more robust solution, we'd sync items more carefully
         parentItem.getChildren().clear();
         for (CardElement el : elements) {
             parentItem.getChildren().add(createTreeItemRecursive(el));
         }
     }
 
+    /**
+     * Creates a tree item for an element and its children recursively.
+     *
+     * @param el the element to create a tree item for
+     * @return the created tree item
+     */
     private TreeItem<CardElement> createTreeItemRecursive(CardElement el) {
         TreeItem<CardElement> item = new TreeItem<>(el);
-        item.setExpanded(expandedElements.contains(el) || (el instanceof ParentCardElement && !expandedElements.isEmpty() == false));
-        // If expandedElements is empty (first time or reset), default to expanded
-        if (expandedElements.isEmpty()) {
+        
+        // Default to expanded if it's the first time or explicitly in the expanded set
+        if (expandedElements.isEmpty() || expandedElements.contains(el)) {
             item.setExpanded(true);
+        } else if (el instanceof ParentCardElement) {
+            item.setExpanded(false);
         }
         
         if (el instanceof ParentCardElement pe) {
             // Listen for children changes to refresh this branch
-            pe.getChildren().removeListener(nestedListener); // avoid duplicates
+            pe.getChildren().removeListener(nestedListener); 
             pe.getChildren().addListener(nestedListener);
             
             for (CardElement child : pe.getChildren()) {
@@ -483,16 +498,12 @@ public class CardMakerController {
                     handle.setVisible(true);
                     handle.toFront();
                 }
-                
-                // CRITICAL: Ensure labels in displayStack are NOT obscured by elements or their children
-                if (sizeLabel != null) sizeLabel.toFront();
-                if (zoomLabel != null) zoomLabel.toFront();
-                if (coordinatesLabel != null) coordinatesLabel.toFront();
-            } else if (found.getParent() instanceof Pane parentPane) {
-                // If it's a child of a layout pane (HBox/VBox/FlowPane), 
-                // we might want to highlight the parent if it's a ContainerElement?
-                // But the user selected the child.
             }
+            
+            // CRITICAL: Ensure labels in displayStack are NOT obscured by elements or their children
+            if (sizeLabel != null) sizeLabel.toFront();
+            if (zoomLabel != null) zoomLabel.toFront();
+            if (coordinatesLabel != null) coordinatesLabel.toFront();
         }
     }
 
@@ -525,9 +536,7 @@ public class CardMakerController {
     private boolean hasOverflowingImage(ObservableList<CardElement> elements) {
         for (CardElement el : elements) {
             if (el instanceof ImageElement ie && ie.isAllowOverflow()) return true;
-            if (el instanceof ParentCardElement pe) {
-                if (hasOverflowingImage(pe.getChildren())) return true;
-            }
+            if (el instanceof ParentCardElement pe && hasOverflowingImage(pe.getChildren())) return true;
         }
         return false;
     }
@@ -594,57 +603,53 @@ public class CardMakerController {
         FontElement currentFont = inheritedFont;
         for (CardElement el : elements) {
             if (!el.isEnabled()) continue;
+            
             if (el instanceof ConditionElement ce) {
                 if (dataMerger.evaluateCondition(ce.getCondition(), currentRecord)) {
                     renderElements(ce.getChildren(), targetPane, currentRecord, currentFont, containerLayout, containerAlignment, forFinalDesign, isLocked);
                 }
-                continue;
-            }
-            if (el instanceof FontElement fe) {
+            } else if (el instanceof FontElement fe) {
                 currentFont = fe;
-                continue;
-            }
-
-            if (el instanceof IconElement ice && containerLayout != ContainerElement.LayoutType.POSITIONAL) {
+            } else if (el instanceof IconElement ice && containerLayout != ContainerElement.LayoutType.POSITIONAL) {
                 // Special handling for IconElement in layout containers: render individual icons as separate nodes
-                List<Node> iconNodes = createIconNodes(ice, currentRecord, containerAlignment);
+                List<Node> iconNodes = createIconNodes(ice, currentRecord);
                 for (Node node : iconNodes) {
                     targetPane.getChildren().add(node);
-                    if (!forFinalDesign && isLocked) {
-                        node.setMouseTransparent(true);
-                    }
-                    if (!forFinalDesign && !isLocked) {
-                        makeDraggable(node, ice);
+                    if (!forFinalDesign) {
+                        if (isLocked) {
+                            node.setMouseTransparent(true);
+                        } else {
+                            makeDraggable(node, ice);
+                        }
                     }
                     node.getProperties().put("cardElement", ice);
                 }
-                continue;
-            }
-
-            Node node = createNodeForElement(el, currentRecord, currentFont, containerLayout, containerAlignment, forFinalDesign, isLocked);
-            if (node != null) {
-                targetPane.getChildren().add(node);
-                if (el instanceof ParentCardElement pe && node instanceof Pane childPane) {
-                    ContainerElement.LayoutType childLayout = ContainerElement.LayoutType.POSITIONAL;
-                    ContainerElement.Alignment childAlign = ContainerElement.Alignment.LEFT;
-                    boolean nextLocked = isLocked;
-                    
-                    if (pe instanceof ContainerElement ce) {
-                        childLayout = ce.getLayoutType();
-                        childAlign = ce.getAlignment();
-                        nextLocked |= ce.isLocked();
+            } else {
+                Node node = createNodeForElement(el, currentRecord, currentFont, containerLayout, containerAlignment, forFinalDesign, isLocked);
+                if (node != null) {
+                    targetPane.getChildren().add(node);
+                    if (el instanceof ParentCardElement pe && node instanceof Pane childPane) {
+                        ContainerElement.LayoutType childLayout = ContainerElement.LayoutType.POSITIONAL;
+                        ContainerElement.Alignment childAlign = ContainerElement.Alignment.LEFT;
+                        boolean nextLocked = isLocked;
+                        
+                        if (pe instanceof ContainerElement ce) {
+                            childLayout = ce.getLayoutType();
+                            childAlign = ce.getAlignment();
+                            nextLocked |= ce.isLocked();
+                        }
+                        
+                        renderElements(pe.getChildren(), childPane, currentRecord, currentFont, childLayout, childAlign, forFinalDesign, nextLocked);
                     }
-                    
-                    renderElements(pe.getChildren(), childPane, currentRecord, currentFont, childLayout, childAlign, forFinalDesign, nextLocked);
-                }
-                if (node instanceof Pane pane) {
-                    ensureResizeHandleOnTop(pane);
+                    if (node instanceof Pane pane) {
+                        ensureResizeHandleOnTop(pane);
+                    }
                 }
             }
         }
     }
 
-    private List<Node> createIconNodes(IconElement ice, Map<String, String> currentRecord, ContainerElement.Alignment parentAlignment) {
+    private List<Node> createIconNodes(IconElement ice, Map<String, String> currentRecord) {
         List<Node> nodes = new ArrayList<>();
         String val = (currentRecord != null) ? dataMerger.merge(ice.getValue(), currentRecord) : ice.getValue();
         if (val != null) {
@@ -684,203 +689,197 @@ public class CardMakerController {
         return nodes;
     }
 
+    /**
+     * Creates a JavaFX Node for a given CardElement.
+     */
     private Node createNodeForElement(CardElement el, Map<String, String> currentRecord, FontElement fontConfig, ContainerElement.LayoutType parentLayout, ContainerElement.Alignment parentAlignment, boolean forFinalDesign, boolean isLocked) {
-        Node node;
-        boolean isPositional = parentLayout == null || parentLayout == ContainerElement.LayoutType.POSITIONAL;
+        Node node = switch (el) {
+            case TextElement te -> createTextNode(te, currentRecord, fontConfig, parentAlignment);
+            case ImageElement ie -> createImageNode(ie, currentRecord);
+            case ContainerElement ce -> createContainerNode(ce, parentAlignment, forFinalDesign);
+            case IconElement ice -> createIconFlowPane(ice, currentRecord, parentAlignment);
+            default -> null;
+        };
 
-        if (el instanceof TextElement te) {
-            Text text = new Text();
-            text.textProperty().bind(javafx.beans.binding.Bindings.createStringBinding(
-                () -> (currentRecord != null) ? dataMerger.merge(te.getText(), currentRecord) : te.getText(),
-                te.textProperty()
-            ));
-            text.getStyleClass().add("text-element");
-            
-            // Resolve font config
-            FontElement resolvedFont = fontConfig;
-            if (te.getFontConfigName() != null && !te.getFontConfigName().equals("Default")) {
-                FontElement libFont = currentTemplate.getFontLibrary().getFonts().get(te.getFontConfigName());
-                if (libFont != null) {
-                    resolvedFont = libFont;
+        if (node != null) {
+            boolean isPositional = parentLayout == null || parentLayout == ContainerElement.LayoutType.POSITIONAL;
+            if (isPositional) {
+                node.layoutXProperty().bind(el.xProperty());
+                if (el instanceof TextElement te) {
+                    node.layoutYProperty().bind(el.yProperty().add(te.fontSizeProperty()));
+                } else {
+                    node.layoutYProperty().bind(el.yProperty());
                 }
             }
-            final FontElement effectiveFont = resolvedFont;
 
-            if (effectiveFont != null) {
-                text.fontProperty().bind(javafx.beans.binding.Bindings.createObjectBinding(
+            if (!forFinalDesign) {
+                if (isLocked || (el instanceof ContainerElement ce && ce.isLocked())) {
+                    node.setMouseTransparent(true);
+                } else {
+                    makeDraggable(node, el);
+                    if (el instanceof ContainerElement ce) {
+                        makeResizable((Pane) node, ce);
+                    }
+                }
+            }
+            node.getProperties().put("cardElement", el);
+        }
+        return node;
+    }
+
+    private Text createTextNode(TextElement te, Map<String, String> currentRecord, FontElement fontConfig, ContainerElement.Alignment parentAlignment) {
+        Text text = new Text();
+        text.textProperty().bind(javafx.beans.binding.Bindings.createStringBinding(
+                () -> (currentRecord != null) ? dataMerger.merge(te.getText(), currentRecord) : te.getText(),
+                te.textProperty()
+        ));
+        text.getStyleClass().add("text-element");
+
+        FontElement resolvedFont = fontConfig;
+        if (te.getFontConfigName() != null && !te.getFontConfigName().equals("Default")) {
+            FontElement libFont = currentTemplate.getFontLibrary().getFonts().get(te.getFontConfigName());
+            if (libFont != null) {
+                resolvedFont = libFont;
+            }
+        }
+        final FontElement effectiveFont = resolvedFont;
+
+        if (effectiveFont != null) {
+            text.fontProperty().bind(javafx.beans.binding.Bindings.createObjectBinding(
                     () -> Font.font(effectiveFont.getFontFamily(), effectiveFont.getFontWeight(), effectiveFont.getFontPosture(), effectiveFont.getFontSize()),
                     effectiveFont.fontFamilyProperty(), effectiveFont.fontWeightProperty(), effectiveFont.fontPostureProperty(), effectiveFont.fontSizeProperty()
-                ));
-                text.fillProperty().bind(javafx.beans.binding.Bindings.createObjectBinding(
+            ));
+            text.fillProperty().bind(javafx.beans.binding.Bindings.createObjectBinding(
                     () -> {
                         try { return Color.web(effectiveFont.getColor()); } catch (Exception e) { return Color.BLACK; }
                     }, effectiveFont.colorProperty()
-                ));
-                text.rotateProperty().bind(effectiveFont.angleProperty());
-                text.strokeWidthProperty().bind(effectiveFont.outlineWidthProperty());
-                text.strokeProperty().bind(javafx.beans.binding.Bindings.createObjectBinding(
+            ));
+            text.rotateProperty().bind(effectiveFont.angleProperty());
+            text.strokeWidthProperty().bind(effectiveFont.outlineWidthProperty());
+            text.strokeProperty().bind(javafx.beans.binding.Bindings.createObjectBinding(
                     () -> {
                         try { return Color.web(effectiveFont.getOutlineColor()); } catch (Exception e) { return Color.TRANSPARENT; }
                     }, effectiveFont.outlineColorProperty()
-                ));
-            } else {
-                text.fontProperty().bind(javafx.beans.binding.Bindings.createObjectBinding(
+            ));
+        } else {
+            text.fontProperty().bind(javafx.beans.binding.Bindings.createObjectBinding(
                     () -> Font.font(te.getFontSize()), te.fontSizeProperty()
-                ));
-                text.fillProperty().bind(javafx.beans.binding.Bindings.createObjectBinding(
+            ));
+            text.fillProperty().bind(javafx.beans.binding.Bindings.createObjectBinding(
                     () -> {
                         try { return Color.web(te.getColor()); } catch (Exception e) { return Color.BLACK; }
                     }, te.colorProperty()
-                ));
-                text.rotateProperty().bind(te.angleProperty());
-                text.strokeWidthProperty().bind(te.outlineWidthProperty());
-                text.strokeProperty().bind(javafx.beans.binding.Bindings.createObjectBinding(
+            ));
+            text.rotateProperty().bind(te.angleProperty());
+            text.strokeWidthProperty().bind(te.outlineWidthProperty());
+            text.strokeProperty().bind(javafx.beans.binding.Bindings.createObjectBinding(
                     () -> {
                         try { return Color.web(te.getOutlineColor()); } catch (Exception e) { return Color.TRANSPARENT; }
                     }, te.outlineColorProperty()
-                ));
-            }
-            text.wrappingWidthProperty().bind(te.wrappingWidthProperty());
-            text.setTextAlignment(mapAlignmentToTextAlignment(parentAlignment));
-            
-            node = text;
-            if (isPositional) {
-                text.layoutXProperty().bind(te.xProperty());
-                text.layoutYProperty().bind(te.yProperty().add(te.fontSizeProperty())); // Text layout Y is baseline
-            }
-        } else if (el instanceof ImageElement ie) {
-            ImageView imageView = new ImageView();
-            imageView.getStyleClass().add("image-element");
-            
-            // Listen to path changes and update image
-            javafx.beans.value.ChangeListener<String> pathListener = (obs, old, newVal) -> {
-                String p = (currentRecord != null) ? dataMerger.merge(newVal, currentRecord) : newVal;
-                if (p != null && !p.isEmpty()) {
-                    imageView.setImage(loadSafeImage(p));
-                } else {
-                    imageView.setImage(null);
-                }
-            };
-            ie.imagePathProperty().addListener(pathListener);
-            pathListener.changed(null, null, ie.getImagePath());
+            ));
+        }
+        text.wrappingWidthProperty().bind(te.wrappingWidthProperty());
+        text.setTextAlignment(mapAlignmentToTextAlignment(parentAlignment));
+        return text;
+    }
 
-            imageView.fitWidthProperty().bind(ie.widthProperty());
-            imageView.fitHeightProperty().bind(ie.heightProperty());
-            imageView.preserveRatioProperty().bind(ie.lockAspectRatioProperty());
-            
-            if (ie.isAllowOverflow()) {
-                imageView.setManaged(false);
-            }
-            
-            node = imageView;
-            if (isPositional) {
-                imageView.layoutXProperty().bind(ie.xProperty());
-                imageView.layoutYProperty().bind(ie.yProperty());
-            }
-        } else if (el instanceof ContainerElement ce) {
-            Pane pane;
-            switch (ce.getLayoutType()) {
-                case VERTICAL:
-                    VBox vbox = new VBox();
-                    vbox.setAlignment(mapAlignmentToPos(ce.getAlignment(), true));
-                    ce.alignmentProperty().addListener((obs, old, newVal) -> vbox.setAlignment(mapAlignmentToPos(newVal, true)));
-                    vbox.spacingProperty().bind(ce.spacingProperty());
-                    pane = vbox;
-                    break;
-                case HORIZONTAL:
-                    HBox hbox = new HBox();
-                    hbox.setAlignment(mapAlignmentToPos(ce.getAlignment(), false));
-                    ce.alignmentProperty().addListener((obs, old, newVal) -> hbox.setAlignment(mapAlignmentToPos(newVal, false)));
-                    hbox.spacingProperty().bind(ce.spacingProperty());
-                    pane = hbox;
-                    break;
-                case FLOW:
-                    FlowPane flowPane = new FlowPane();
-                    flowPane.setAlignment(mapAlignmentToPos(ce.getAlignment(), false));
-                    ce.alignmentProperty().addListener((obs, old, newVal) -> flowPane.setAlignment(mapAlignmentToPos(newVal, false)));
-                    flowPane.hgapProperty().bind(ce.spacingProperty());
-                    flowPane.vgapProperty().bind(ce.spacingProperty());
-                    pane = flowPane;
-                    break;
-                case STACK:
-                    StackPane stackPane = new StackPane();
-                    stackPane.setAlignment(mapAlignmentToPos(ce.getAlignment(), false));
-                    ce.alignmentProperty().addListener((obs, old, newVal) -> stackPane.setAlignment(mapAlignmentToPos(newVal, false)));
-                    pane = stackPane;
-                    break;
-                case POSITIONAL:
-                default:
-                    pane = new Pane();
-                    break;
-            }
-            pane.getStyleClass().add("container-element");
-            
-            pane.prefWidthProperty().bind(ce.widthProperty());
-            pane.prefHeightProperty().bind(ce.heightProperty());
-            pane.minWidthProperty().bind(ce.widthProperty());
-            pane.minHeightProperty().bind(ce.heightProperty());
-            
-            if (!showClippedContent) {
-                javafx.scene.shape.Rectangle paneClip = new javafx.scene.shape.Rectangle();
-                paneClip.widthProperty().bind(ce.widthProperty());
-                paneClip.heightProperty().bind(ce.heightProperty());
-                pane.setClip(paneClip);
+    private ImageView createImageNode(ImageElement ie, Map<String, String> currentRecord) {
+        ImageView imageView = new ImageView();
+        imageView.getStyleClass().add("image-element");
+
+        javafx.beans.value.ChangeListener<String> pathListener = (obs, old, newVal) -> {
+            String p = (currentRecord != null) ? dataMerger.merge(newVal, currentRecord) : newVal;
+            if (p != null && !p.isEmpty()) {
+                imageView.setImage(loadSafeImage(p));
             } else {
-                pane.setClip(null);
+                imageView.setImage(null);
             }
-            
-            pane.setPickOnBounds(true); // allow dragging by clicking anywhere inside the bounds, even if transparent
-            
-            updatePaneStyle(pane, ce.getBackgroundColor(), ce.getAlpha(), forFinalDesign);
-            ce.backgroundColorProperty().addListener((obs, old, newVal) -> updatePaneStyle(pane, newVal, ce.getAlpha(), forFinalDesign));
-            ce.alphaProperty().addListener((obs, old, newVal) -> updatePaneStyle(pane, ce.getBackgroundColor(), newVal.doubleValue(), forFinalDesign));
+        };
+        ie.imagePathProperty().addListener(pathListener);
+        pathListener.changed(null, null, ie.getImagePath());
 
-            if (!forFinalDesign && !isLocked) {
-                makeResizable(pane, ce);
-            }
+        imageView.fitWidthProperty().bind(ie.widthProperty());
+        imageView.fitHeightProperty().bind(ie.heightProperty());
+        imageView.preserveRatioProperty().bind(ie.lockAspectRatioProperty());
 
-            node = pane;
-            if (isPositional) {
-                pane.layoutXProperty().bind(ce.xProperty());
-                pane.layoutYProperty().bind(ce.yProperty());
-            }
-        } else if (el instanceof IconElement ice) {
-            // This is only used for POSITIONAL layout now
-            FlowPane flowPane = new FlowPane();
-            flowPane.getStyleClass().add("icon-element");
-            flowPane.setAlignment(mapAlignmentToPos(parentAlignment, false));
-            flowPane.setPickOnBounds(false); // only pick icons, not the empty area of the flow pane
-            flowPane.setMaxWidth(Region.USE_PREF_SIZE);
-            flowPane.setMaxHeight(Region.USE_PREF_SIZE);
-            
-            // Listen to value changes and rebuild children
-            javafx.beans.value.ChangeListener<Object> rebuildIcons = (obs, old, newVal) -> {
-                flowPane.getChildren().clear();
-                List<Node> iconNodes = createIconNodes(ice, currentRecord, parentAlignment);
-                flowPane.getChildren().addAll(iconNodes);
-            };
-            ice.valueProperty().addListener(rebuildIcons);
-            ice.mappingNameProperty().addListener(rebuildIcons);
-            rebuildIcons.changed(null, null, null);
-
-            node = flowPane;
-            if (isPositional) {
-                flowPane.layoutXProperty().bind(ice.xProperty());
-                flowPane.layoutYProperty().bind(ice.yProperty());
-            }
-        } else {
-            return null;
+        if (ie.isAllowOverflow()) {
+            imageView.setManaged(false);
         }
+        return imageView;
+    }
 
-        if (!forFinalDesign && isLocked) {
-            node.setMouseTransparent(true);
-        }
+    private Pane createContainerNode(ContainerElement ce, ContainerElement.Alignment parentAlignment, boolean forFinalDesign) {
+        Pane pane = switch (ce.getLayoutType()) {
+            case VERTICAL -> {
+                VBox vbox = new VBox();
+                vbox.setAlignment(mapAlignmentToPos(ce.getAlignment(), true));
+                ce.alignmentProperty().addListener((obs, old, newVal) -> vbox.setAlignment(mapAlignmentToPos(newVal, true)));
+                vbox.spacingProperty().bind(ce.spacingProperty());
+                yield vbox;
+            }
+            case HORIZONTAL -> {
+                HBox hbox = new HBox();
+                hbox.setAlignment(mapAlignmentToPos(ce.getAlignment(), false));
+                ce.alignmentProperty().addListener((obs, old, newVal) -> hbox.setAlignment(mapAlignmentToPos(newVal, false)));
+                hbox.spacingProperty().bind(ce.spacingProperty());
+                yield hbox;
+            }
+            case FLOW -> {
+                FlowPane flowPane = new FlowPane();
+                flowPane.setAlignment(mapAlignmentToPos(ce.getAlignment(), false));
+                ce.alignmentProperty().addListener((obs, old, newVal) -> flowPane.setAlignment(mapAlignmentToPos(newVal, false)));
+                flowPane.hgapProperty().bind(ce.spacingProperty());
+                flowPane.vgapProperty().bind(ce.spacingProperty());
+                yield flowPane;
+            }
+            case STACK -> {
+                StackPane stackPane = new StackPane();
+                stackPane.setAlignment(mapAlignmentToPos(ce.getAlignment(), false));
+                ce.alignmentProperty().addListener((obs, old, newVal) -> stackPane.setAlignment(mapAlignmentToPos(newVal, false)));
+                yield stackPane;
+            }
+            default -> new Pane();
+        };
 
-        if (!forFinalDesign && !isLocked) {
-            makeDraggable(node, el);
+        pane.getStyleClass().add("container-element");
+        pane.minWidthProperty().bind(ce.widthProperty());
+        pane.maxWidthProperty().bind(ce.widthProperty());
+        pane.minHeightProperty().bind(ce.heightProperty());
+        pane.maxHeightProperty().bind(ce.heightProperty());
+        pane.prefWidthProperty().bind(ce.widthProperty());
+        pane.prefHeightProperty().bind(ce.heightProperty());
+
+        updatePaneStyle(pane, ce.getBackgroundColor(), ce.getAlpha(), forFinalDesign);
+        ce.backgroundColorProperty().addListener((obs, old, newVal) -> updatePaneStyle(pane, newVal, ce.getAlpha(), forFinalDesign));
+        ce.alphaProperty().addListener((obs, old, newVal) -> updatePaneStyle(pane, ce.getBackgroundColor(), newVal.doubleValue(), forFinalDesign));
+
+        if (!showClippedContent) {
+            javafx.scene.shape.Rectangle clip = new javafx.scene.shape.Rectangle();
+            clip.widthProperty().bind(pane.widthProperty());
+            clip.heightProperty().bind(pane.heightProperty());
+            pane.setClip(clip);
         }
-        node.getProperties().put("cardElement", el);
-        return node;
+        pane.setPickOnBounds(true);
+        return pane;
+    }
+
+    private FlowPane createIconFlowPane(IconElement ice, Map<String, String> currentRecord, ContainerElement.Alignment parentAlignment) {
+        FlowPane flowPane = new FlowPane();
+        flowPane.getStyleClass().add("icon-element");
+        flowPane.setAlignment(mapAlignmentToPos(parentAlignment, false));
+        flowPane.setPickOnBounds(false);
+        flowPane.setMaxWidth(Region.USE_PREF_SIZE);
+        flowPane.setMaxHeight(Region.USE_PREF_SIZE);
+
+        javafx.beans.value.ChangeListener<Object> rebuildIcons = (obs, old, newVal) -> {
+            flowPane.getChildren().clear();
+            List<Node> iconNodes = createIconNodes(ice, currentRecord);
+            flowPane.getChildren().addAll(iconNodes);
+        };
+        ice.valueProperty().addListener(rebuildIcons);
+        ice.mappingNameProperty().addListener(rebuildIcons);
+        rebuildIcons.changed(null, null, null);
+        return flowPane;
     }
 
     private Image loadSafeImage(String path) {

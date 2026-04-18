@@ -132,15 +132,35 @@ public class DataMerger {
         return loadCsv(filePath).records;
     }
 
+    /**
+     * Merges a template string with values from a data record.
+     * Tags in the format {{ColumnName}} are replaced with corresponding record values.
+     *
+     * @param template the template string
+     * @param record   the data record
+     * @return the merged string
+     */
     public String merge(String template, Map<String, String> record) {
         if (template == null) return null;
+        if (record == null) return template;
+        
         String result = template;
         for (Map.Entry<String, String> entry : record.entrySet()) {
-            result = result.replace("{{" + entry.getKey() + "}}", entry.getValue());
+            String key = entry.getKey();
+            String value = entry.getValue() != null ? entry.getValue() : "";
+            result = result.replace("{{" + key + "}}", value);
         }
         return result;
     }
 
+    /**
+     * Evaluates a simple conditional expression against a data record.
+     * Supports "==" and "!=" operators. If no operator is present, returns true if the merged string is not empty.
+     *
+     * @param condition the condition string
+     * @param record    the data record
+     * @return true if the condition is met
+     */
     public boolean evaluateCondition(String condition, Map<String, String> record) {
         if (condition == null || condition.trim().isEmpty()) return true;
         if (record == null) return false;
