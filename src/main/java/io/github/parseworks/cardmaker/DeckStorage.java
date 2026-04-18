@@ -25,9 +25,9 @@ public class DeckStorage {
         module.addDeserializer(StringProperty.class, new StringPropertyDeserializer());
         module.addDeserializer(IntegerProperty.class, new IntegerPropertyDeserializer());
         module.addDeserializer(BooleanProperty.class, new BooleanPropertyDeserializer());
-        module.addDeserializer(ObjectProperty.class, (JsonDeserializer) new ObjectPropertyDeserializer());
+        module.addDeserializer(ObjectProperty.class, new ObjectPropertyDeserializer());
         module.addSerializer(ObservableList.class, (JsonSerializer) new ObservableListSerializer());
-        module.addDeserializer(ObservableList.class, (JsonDeserializer) new ObservableListDeserializer());
+        module.addDeserializer(ObservableList.class, new ObservableListDeserializer());
         mapper.registerModule(module);
         mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
     }

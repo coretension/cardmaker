@@ -3,16 +3,30 @@ package io.github.parseworks.cardmaker;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 
+/**
+ * Abstract base class for card elements that can contain other card elements as children.
+ */
 public abstract class ParentCardElement extends CardElement {
+    /** List of child elements contained within this element. */
     private final ObservableList<CardElement> children = FXCollections.observableArrayList();
 
+    /**
+     * Default constructor.
+     */
     public ParentCardElement() {
     }
 
+    /**
+     * Constructor with a name for the element.
+     * @param name the name of the parent element
+     */
     public ParentCardElement(String name) {
         setName(name);
     }
 
+    /**
+     * @return the observable list of child elements
+     */
     public ObservableList<CardElement> getChildren() {
         return children;
     }

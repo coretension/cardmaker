@@ -18,6 +18,10 @@ import javafx.stage.Window;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Service responsible for printing card decks and showing print previews.
+ * Handles printer configuration, page layout, and rendering cards onto printable pages.
+ */
 public class PrintService {
 
     private final CardTemplate template;
@@ -25,6 +29,13 @@ public class PrintService {
     private final DataMerger dataMerger;
     private final CardMakerController controller;
 
+    /**
+     * Constructs a PrintService with necessary dependencies.
+     * @param template the card template to use
+     * @param csvData the data to merge into the template
+     * @param dataMerger the merger service to process the template and data
+     * @param controller the main controller for UI interactions
+     */
     public PrintService(CardTemplate template, List<Map<String, String>> csvData, DataMerger dataMerger, CardMakerController controller) {
         this.template = template;
         this.csvData = csvData;
@@ -32,6 +43,10 @@ public class PrintService {
         this.controller = controller;
     }
 
+    /**
+     * Displays a dialog to configure printing settings and start the print job.
+     * @param owner the owner window for the dialog
+     */
     public void showPrintDialog(Window owner) {
         Stage dialog = new Stage();
         dialog.initModality(Modality.WINDOW_MODAL);
@@ -135,6 +150,12 @@ public class PrintService {
         dialog.show();
     }
 
+    /**
+     * Shows a preview of how the cards will be arranged on the printed pages.
+     * @param cardsPerRow number of cards horizontally per page
+     * @param rowsPerPage number of cards vertically per page
+     * @param pageLayout the configured page layout
+     */
     private void showPreview(int cardsPerRow, int rowsPerPage, PageLayout pageLayout) {
         Stage previewStage = new Stage();
         previewStage.setTitle("Print Preview - Page 1");
@@ -191,6 +212,15 @@ public class PrintService {
         previewStage.show();
     }
 
+    /**
+     * Creates a JavaFX Pane representing a single page of printed cards.
+     * @param pageIndex the index of the page to create
+     * @param cardsPerRow number of cards horizontally per page
+     * @param rowsPerPage number of cards vertically per page
+     * @param pageLayout the page layout configuration
+     * @param forPreview true if creating for preview UI, false if for actual printing
+     * @return a Pane containing the rendered page
+     */
     private Pane createPagePane(int pageIndex, int cardsPerRow, int rowsPerPage, PageLayout pageLayout, boolean forPreview) {
         Pane page = new Pane();
         page.setPrefSize(pageLayout.getPaper().getWidth(), pageLayout.getPaper().getHeight());
@@ -256,6 +286,13 @@ public class PrintService {
         return page;
     }
 
+    /**
+     * Executes the actual printing process.
+     * @param job the printer job to use
+     * @param pageLayout the configured page layout
+     * @param cardsPerRow number of cards horizontally per page
+     * @param rowsPerPage number of cards vertically per page
+     */
     private void performPrint(PrinterJob job, PageLayout pageLayout, int cardsPerRow, int rowsPerPage) {
         int totalCards = csvData.isEmpty() ? 1 : csvData.size();
         int cardsPerPage = cardsPerRow * rowsPerPage;

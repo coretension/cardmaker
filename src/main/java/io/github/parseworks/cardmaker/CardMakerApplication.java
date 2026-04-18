@@ -8,7 +8,16 @@ import javafx.stage.Stage;
 
 import java.io.IOException;
 
+/**
+ * Main JavaFX Application class for Card Maker.
+ * Handles initial setup, DPI detection, and loading the main view.
+ */
 public class CardMakerApplication extends Application {
+    /**
+     * Starts the JavaFX application.
+     * @param stage the primary stage for this application
+     * @throws IOException if the FXML file cannot be loaded
+     */
     @Override
     public void start(Stage stage) throws IOException {
         // Auto-detect screen DPI
