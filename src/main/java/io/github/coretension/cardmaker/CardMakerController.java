@@ -1498,19 +1498,22 @@ public class CardMakerController {
                 new Label("Height"), iconHeightBox
             );
         } else if (el instanceof FontElement fe) {
-            ComboBox<String> familyBox = new ComboBox<>(javafx.collections.FXCollections.observableArrayList(Font.getFamilies()));
+            ComboBox<String> familyBox = new ComboBox<>(FXCollections.observableArrayList(Font.getFamilies()));
             familyBox.setEditable(true);
+            familyBox.setMaxWidth(Double.MAX_VALUE);
             familyBox.valueProperty().bindBidirectional(fe.fontFamilyProperty());
             addManagedListener(fe.fontFamilyProperty(), (obs, old, newVal) -> renderTemplate());
 
             HBox sizeBox = createSliderWithNumericField(fe.fontSizeProperty(), 8, 72);
             addManagedListener(fe.fontSizeProperty(), (obs, old, newVal) -> renderTemplate());
 
-            ChoiceBox<FontWeight> weightBox = new ChoiceBox<>(javafx.collections.FXCollections.observableArrayList(FontWeight.values()));
+            ChoiceBox<FontWeight> weightBox = new ChoiceBox<>(FXCollections.observableArrayList(FontWeight.values()));
+            weightBox.setMaxWidth(Double.MAX_VALUE);
             weightBox.valueProperty().bindBidirectional(fe.fontWeightProperty());
             addManagedListener(fe.fontWeightProperty(), (obs, old, newVal) -> renderTemplate());
 
-            ChoiceBox<FontPosture> postureBox = new ChoiceBox<>(javafx.collections.FXCollections.observableArrayList(FontPosture.values()));
+            ChoiceBox<FontPosture> postureBox = new ChoiceBox<>(FXCollections.observableArrayList(FontPosture.values()));
+            postureBox.setMaxWidth(Double.MAX_VALUE);
             postureBox.valueProperty().bindBidirectional(fe.fontPostureProperty());
             addManagedListener(fe.fontPostureProperty(), (obs, old, newVal) -> renderTemplate());
 
@@ -1690,6 +1693,7 @@ public class CardMakerController {
     void handleAddFont(ActionEvent event) {
         CardElement newEl = new FontElement("New Font Config");
         addElement(newEl);
+        updatePropertiesPane(newEl);
     }
 
     @FXML
@@ -1811,6 +1815,7 @@ public class CardMakerController {
         dialog.getDialogPane().setContent(content);
         dialog.showAndWait();
         renderTemplate();
+        updatePropertiesPane(getSelectedElement());
     }
 
     @FXML
@@ -1865,17 +1870,21 @@ public class CardMakerController {
                 if (fontEl != null) {
                     VBox props = new VBox(5);
                     
-                    TextField familyField = new TextField(fontEl.getFontFamily());
-                    familyField.textProperty().bindBidirectional(fontEl.fontFamilyProperty());
+                    ComboBox<String> familyBox = new ComboBox<>(FXCollections.observableArrayList(Font.getFamilies()));
+                    familyBox.setValue(fontEl.getFontFamily());
+                    familyBox.setMaxWidth(Double.MAX_VALUE);
+                    fontEl.fontFamilyProperty().bind(familyBox.valueProperty());
                     
                     HBox sizeBox = createSliderWithNumericField(fontEl.fontSizeProperty(), 8, 120);
                     
                     ComboBox<FontWeight> weightBox = new ComboBox<>(FXCollections.observableArrayList(FontWeight.values()));
                     weightBox.setValue(fontEl.getFontWeight());
+                    weightBox.setMaxWidth(Double.MAX_VALUE);
                     fontEl.fontWeightProperty().bind(weightBox.valueProperty());
                     
                     ComboBox<FontPosture> postureBox = new ComboBox<>(FXCollections.observableArrayList(FontPosture.values()));
                     postureBox.setValue(fontEl.getFontPosture());
+                    postureBox.setMaxWidth(Double.MAX_VALUE);
                     fontEl.fontPostureProperty().bind(postureBox.valueProperty());
                     
                     ColorPicker colorPicker = new ColorPicker(Color.web(fontEl.getColor()));
@@ -1891,7 +1900,7 @@ public class CardMakerController {
                     outlineColorPicker.setOnAction(ce -> fontEl.setOutlineColor(toHexString(outlineColorPicker.getValue())));
 
                     props.getChildren().addAll(
-                        new Label("Font Family"), familyField,
+                        new Label("Font Family"), familyBox,
                         new Label("Font Size"), sizeBox,
                         new Label("Font Weight"), weightBox,
                         new Label("Font Posture"), postureBox,
@@ -1938,6 +1947,7 @@ public class CardMakerController {
         dialog.getDialogPane().setContent(content);
         dialog.showAndWait();
         renderTemplate();
+        updatePropertiesPane(getSelectedElement());
     }
 
     private void addElement(CardElement newEl) {
