@@ -1,5 +1,8 @@
 package io.github.parseworks.cardmaker;
 
+import javafx.animation.Animation;
+import javafx.animation.KeyFrame;
+import javafx.animation.Timeline;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.value.ChangeListener;
 import javafx.collections.FXCollections;
@@ -75,17 +78,9 @@ public class CardMakerController {
         updateSizeLabel();
         setupZoomListeners();
         updateTitleAndStatus();
+        setupAutoSaveTimeline();
         
-        if (settings.getLastOpenedDeckPath() != null) {
-            File lastFile = new File(settings.getLastOpenedDeckPath());
-            if (lastFile.exists()) {
-                loadDeck(lastFile);
-            } else {
-                loadTempDeck();
-            }
-        } else {
-            loadTempDeck();
-        }
+        checkForRecovery();
         
         elementTreeView.setCellFactory(tv -> {
             TreeCell<CardElement> cell = new TreeCell<>() {
@@ -405,6 +400,7 @@ public class CardMakerController {
         saveExpandedState(elementTreeView.getRoot());
         rebuildTree();
         renderTemplate();
+        saveTempDeck();
     };
 
     private void saveExpandedState(TreeItem<CardElement> item) {
@@ -425,7 +421,10 @@ public class CardMakerController {
             saveExpandedState(elementTreeView.getRoot());
             rebuildTree();
             renderTemplate();
+            saveTempDeck();
         });
+        currentTemplate.getFontLibrary().fontsProperty().addListener((javafx.collections.MapChangeListener<String, FontElement>) change -> saveTempDeck());
+        currentTemplate.getIconLibrary().mappingsProperty().addListener((javafx.collections.MapChangeListener<String, Map<String, String>>) change -> saveTempDeck());
     }
 
     /**
@@ -467,6 +466,63 @@ public class CardMakerController {
     private TreeItem<CardElement> createTreeItemRecursive(CardElement el) {
         TreeItem<CardElement> item = new TreeItem<>(el);
         
+        // Add listeners to common properties for auto-save
+        el.xProperty().addListener((obs, old, newVal) -> saveTempDeck());
+        el.yProperty().addListener((obs, old, newVal) -> saveTempDeck());
+        el.nameProperty().addListener((obs, old, newVal) -> saveTempDeck());
+        el.enabledProperty().addListener((obs, old, newVal) -> saveTempDeck());
+
+        // Add subclass-specific listeners
+        switch (el) {
+            case TextElement te -> {
+                te.textProperty().addListener((obs, old, newVal) -> saveTempDeck());
+                te.fontSizeProperty().addListener((obs, old, newVal) -> saveTempDeck());
+                te.colorProperty().addListener((obs, old, newVal) -> saveTempDeck());
+                te.angleProperty().addListener((obs, old, newVal) -> saveTempDeck());
+                te.outlineWidthProperty().addListener((obs, old, newVal) -> saveTempDeck());
+                te.outlineColorProperty().addListener((obs, old, newVal) -> saveTempDeck());
+                te.fontConfigNameProperty().addListener((obs, old, newVal) -> saveTempDeck());
+            }
+            case ImageElement ie -> {
+                ie.imagePathProperty().addListener((obs, old, newVal) -> saveTempDeck());
+                ie.widthProperty().addListener((obs, old, newVal) -> saveTempDeck());
+                ie.heightProperty().addListener((obs, old, newVal) -> saveTempDeck());
+                ie.lockAspectRatioProperty().addListener((obs, old, newVal) -> saveTempDeck());
+                ie.allowOverflowProperty().addListener((obs, old, newVal) -> saveTempDeck());
+            }
+            case IconElement ice -> {
+                ice.valueProperty().addListener((obs, old, newVal) -> saveTempDeck());
+                ice.iconWidthProperty().addListener((obs, old, newVal) -> saveTempDeck());
+                ice.iconHeightProperty().addListener((obs, old, newVal) -> saveTempDeck());
+                ice.mappingNameProperty().addListener((obs, old, newVal) -> saveTempDeck());
+            }
+            case ContainerElement ce -> {
+                ce.widthProperty().addListener((obs, old, newVal) -> saveTempDeck());
+                ce.heightProperty().addListener((obs, old, newVal) -> saveTempDeck());
+                ce.alphaProperty().addListener((obs, old, newVal) -> saveTempDeck());
+                ce.backgroundColorProperty().addListener((obs, old, newVal) -> saveTempDeck());
+                ce.layoutTypeProperty().addListener((obs, old, newVal) -> saveTempDeck());
+                ce.alignmentProperty().addListener((obs, old, newVal) -> saveTempDeck());
+                ce.spacingProperty().addListener((obs, old, newVal) -> saveTempDeck());
+                ce.lockedProperty().addListener((obs, old, newVal) -> saveTempDeck());
+                ce.lockAspectRatioProperty().addListener((obs, old, newVal) -> saveTempDeck());
+            }
+            case ConditionElement ce -> {
+                ce.conditionProperty().addListener((obs, old, newVal) -> saveTempDeck());
+            }
+            case FontElement fe -> {
+                fe.fontFamilyProperty().addListener((obs, old, newVal) -> saveTempDeck());
+                fe.fontSizeProperty().addListener((obs, old, newVal) -> saveTempDeck());
+                fe.fontWeightProperty().addListener((obs, old, newVal) -> saveTempDeck());
+                fe.fontPostureProperty().addListener((obs, old, newVal) -> saveTempDeck());
+                fe.colorProperty().addListener((obs, old, newVal) -> saveTempDeck());
+                fe.angleProperty().addListener((obs, old, newVal) -> saveTempDeck());
+                fe.outlineWidthProperty().addListener((obs, old, newVal) -> saveTempDeck());
+                fe.outlineColorProperty().addListener((obs, old, newVal) -> saveTempDeck());
+            }
+            default -> {}
+        }
+
         // Default to expanded if it's the first time or explicitly in the expanded set
         if (expandedElements.isEmpty() || expandedElements.contains(el)) {
             item.setExpanded(true);
@@ -1241,7 +1297,7 @@ public class CardMakerController {
             HBox sizeBox = createSliderWithNumericField(te.fontSizeProperty(), 8, 72);
             sizeBox.disableProperty().bind(isNotDefault);
             addManagedListener(te.fontSizeProperty(), (obs, old, newVal) -> renderTemplate());
-            propertiesPane.getChildren().add(new Label("Font Size"));
+            propertiesPane.getChildren().add(new Label("Size"));
             propertiesPane.getChildren().add(sizeBox);
 
             ColorPicker colorPicker = new ColorPicker(Color.web(te.getColor()));
@@ -1337,7 +1393,7 @@ public class CardMakerController {
                 renderTemplate();
             });
 
-            propertiesPane.getChildren().addAll(new Label("Image Path"), new HBox(5, pathField, browseBtn),
+            propertiesPane.getChildren().addAll(new HBox(5, pathField, browseBtn),
                                             new Label("Width"), widthBox,
                                             new Label("Height"), heightBox,
                                             lockAspectBox,
@@ -1420,9 +1476,9 @@ public class CardMakerController {
                 new Label("Width"), widthBox,
                 new Label("Height"), heightBox,
                 lockAspectBox,
-                new Label("Background Alpha"), alphaBox,
-                new Label("Background Color"), colorPicker,
-                new Label("Layout Type"), layoutBox,
+                new Label("Alpha"), alphaBox,
+                new Label("Color"), colorPicker,
+                new Label("Layout"), layoutBox,
                 new Label("Alignment"), alignBox,
                 new Label("Spacing"), spacingBox,
                 lockedBox
@@ -1440,9 +1496,12 @@ public class CardMakerController {
 
             propertiesPane.getChildren().addAll(
                 new Label("Value (supports {{header}})"), valueField,
-                new Label("Icon Width"), iconWidthBox,
-                new Label("Icon Height"), iconHeightBox,
-                new Label("Icon Mapping"), mappingBox
+                mappingBox
+            );
+            addSectionLabel("Icon Dimensions");
+            propertiesPane.getChildren().addAll(
+                new Label("Width"), iconWidthBox,
+                new Label("Height"), iconHeightBox
             );
         } else if (el instanceof FontElement fe) {
             ComboBox<String> familyBox = new ComboBox<>(javafx.collections.FXCollections.observableArrayList(Font.getFamilies()));
@@ -1485,10 +1544,10 @@ public class CardMakerController {
             });
 
             propertiesPane.getChildren().addAll(
-                new Label("Font Family"), familyBox,
-                new Label("Font Size"), sizeBox,
-                new Label("Font Weight"), weightBox,
-                new Label("Font Posture"), postureBox,
+                new Label("Family"), familyBox,
+                new Label("Size"), sizeBox,
+                new Label("Weight"), weightBox,
+                new Label("Posture"), postureBox,
                 new Label("Color"), colorPicker,
                 new Label("Angle"), angleBox,
                 new Label("Outline Width"), outlineWidthBox,
@@ -1568,6 +1627,7 @@ public class CardMakerController {
             updateCanvasSize();
             renderTemplate();
             updateTitleAndStatus();
+            deleteTempDeck();
         });
     }
 
@@ -2355,7 +2415,49 @@ public class CardMakerController {
         });
     }
 
-    void saveTempDeck() {
+    private void checkForRecovery() {
+        File tempFile = DeckStorage.getTempFile();
+        if (tempFile.exists()) {
+            File lastFile = null;
+            if (settings.getLastOpenedDeckPath() != null) {
+                lastFile = new File(settings.getLastOpenedDeckPath());
+            }
+
+            boolean recover = false;
+            if (lastFile != null && lastFile.exists()) {
+                if (tempFile.lastModified() > lastFile.lastModified()) {
+                    Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
+                    alert.setTitle("Unsaved Changes Found");
+                    alert.setHeaderText("Unsaved changes detected for '" + lastFile.getName() + "'.");
+                    alert.setContentText("Do you want to recover them?");
+                    Optional<ButtonType> result = alert.showAndWait();
+                    if (result.isPresent() && result.get() == ButtonType.OK) {
+                        recover = true;
+                    }
+                }
+            } else {
+                // No last file or it's gone, but temp exists. Maybe an unsaved new deck.
+                recover = true;
+            }
+
+            if (recover) {
+                loadTempDeck();
+                if (lastFile != null && lastFile.exists()) {
+                    currentFile = lastFile;
+                    updateTitleAndStatus();
+                }
+            } else if (lastFile != null && lastFile.exists()) {
+                loadDeck(lastFile);
+            }
+        } else if (settings.getLastOpenedDeckPath() != null) {
+            File lastFile = new File(settings.getLastOpenedDeckPath());
+            if (lastFile.exists()) {
+                loadDeck(lastFile);
+            }
+        }
+    }
+
+    public void saveTempDeck() {
         try {
             DeckStorage.save(currentTemplate, DeckStorage.getTempFile());
         } catch (IOException e) {
@@ -2375,6 +2477,13 @@ public class CardMakerController {
         }
     }
 
+    private void deleteTempDeck() {
+        File tempFile = DeckStorage.getTempFile();
+        if (tempFile.exists()) {
+            tempFile.delete();
+        }
+    }
+
     private void loadSettings() {
         try {
             settings = DeckStorage.loadSettings();
@@ -2389,13 +2498,23 @@ public class CardMakerController {
         }
     }
 
-    void saveSettings() {
+    public void saveSettings() {
         try {
             settings.setProfessionalMode(professionalMode);
             DeckStorage.saveSettings(settings);
         } catch (IOException e) {
             System.err.println("Failed to save settings: " + e.getMessage());
         }
+    }
+
+    private void setupAutoSaveTimeline() {
+        Timeline timeline = new Timeline(new KeyFrame(javafx.util.Duration.seconds(30), event -> {
+            if (currentFile != null) {
+                saveToFile(currentFile);
+            }
+        }));
+        timeline.setCycleCount(Animation.INDEFINITE);
+        timeline.play();
     }
 
     private void applyTemplate(CardTemplate template) {
@@ -2413,7 +2532,13 @@ public class CardMakerController {
         if (currentFile == null) {
             handleSaveDeckAs(event);
         } else {
-            saveToFile(currentFile);
+            try {
+                saveToFile(currentFile);
+            } catch (Exception e) {
+                Alert alert = new Alert(Alert.AlertType.ERROR);
+                alert.setContentText("Error saving deck: " + e.getMessage());
+                alert.show();
+            }
         }
     }
 
@@ -2428,7 +2553,13 @@ public class CardMakerController {
         if (file != null) {
             lastOpenedDirectory = file.getParentFile();
             currentFile = file;
-            saveToFile(file);
+            try {
+                saveToFile(file);
+            } catch (Exception e) {
+                Alert alert = new Alert(Alert.AlertType.ERROR);
+                alert.setContentText("Error saving deck: " + e.getMessage());
+                alert.show();
+            }
         }
     }
 
@@ -2454,6 +2585,7 @@ public class CardMakerController {
             saveSettings();
             applyTemplate(template);
             updateTitleAndStatus();
+            deleteTempDeck();
         } catch (IOException e) {
             Alert alert = new Alert(Alert.AlertType.ERROR);
             alert.setContentText("Error loading deck: " + e.getMessage());
@@ -2468,10 +2600,10 @@ public class CardMakerController {
             settings.setLastOpenedDeckPath(file.getAbsolutePath());
             saveSettings();
             updateTitleAndStatus();
+            deleteTempDeck();
         } catch (IOException e) {
-            Alert alert = new Alert(Alert.AlertType.ERROR);
-            alert.setContentText("Error saving deck: " + e.getMessage());
-            alert.show();
+            // Silently fail during auto-save if needed, but for manual save show alert
+            System.err.println("Error saving deck: " + e.getMessage());
         }
     }
 
