@@ -14,7 +14,7 @@
                 <Menu text="File">
                     <MenuItem text="New Deck" onAction="#handleNewDeck"/>
                     <MenuItem text="Open Deck" onAction="#handleOpenDeck"/>
-                    <MenuItem text="Save Deck" onAction="#handleSaveDeck"/>
+                    <MenuItem text="Save Deck" onAction="#handleSaveDeck" accelerator="Shortcut+S"/>
                     <MenuItem text="Save Deck As..." onAction="#handleSaveDeckAs"/>
                     <SeparatorMenuItem/>
                     <MenuItem text="Load CSV" onAction="#handleLoadCsv"/>
@@ -27,6 +27,7 @@
                     <MenuItem text="Exit" onAction="#handleExit"/>
                 </Menu>
                 <Menu text="View">
+                    <CheckMenuItem fx:id="proModeMenuItem" text="Professional Mode" onAction="#handleToggleProfessionalMode" accelerator="Shortcut+L"/>
                     <CheckMenuItem fx:id="previewMenuItem" text="Preview Mode" onAction="#handleTogglePreviewMode" accelerator="Shortcut+P"/>
                     <CheckMenuItem text="Show Clipped Content" onAction="#handleToggleShowClippedContent"/>
                     <SeparatorMenuItem/>

@@ -6,6 +6,14 @@ Welcome to **CardMaker**, a powerful tool for designing custom card decks for ta
 
 ## 🚀 Getting Started
 
+### Installation & Running
+
+CardMaker is available as a standalone application or a runnable JAR.
+
+- **Windows:** Download and extract the `cardmaker` distribution. Run `cardmaker.exe` located in the `cardmaker` folder. No Java installation is required as it includes its own runtime.
+- **Linux:** Run the `cardmaker.sh` script. This requires Java 21 or higher to be installed on your system.
+- **Generic (JAR):** If you have the `cardmaker-1.0-SNAPSHOT.jar`, run it using `java -jar cardmaker-1.0-SNAPSHOT.jar`. This also requires Java 21+.
+
 ### Creating and Opening Decks
 - **New Deck:** Go to `File > New Deck` to start a fresh project.
 - **Open Deck:** Use `File > Open Deck` to load an existing project (`.json` format).
@@ -35,13 +43,16 @@ You can insert data into text fields or conditions by using "tags" formatted lik
 
 ## 🎨 Card Elements
 
-Add elements to your card via the **Insert** menu.
+Add elements to your card via the **Insert** menu. All elements share common properties:
+- **Enabled:** Toggle whether an element is active and rendered on the card.
+- **Position (X, Y):** Control the placement of the element (relative to its parent).
+- **Name:** A descriptive label for identifying the element in the tree view.
 
 ### 📝 Text
 - **Basic Text:** Static text or tags like `{{Name}}`.
 - **Formatting:** Customize font size, color, and angle.
-- **Outlines:** Add a border to your text for better readability against busy backgrounds.
-- **Wrapping:** Set a "Wrapping Width" to make text flow onto multiple lines.
+- **Outlines:** Add a border to your text for better readability against backgrounds.
+- **Wrapping:** Text automatically wraps based on the width of its parent container.
 - **Font Config:** Link the text to a specific **Font Configuration** (see below) to maintain consistent styling across multiple text elements.
 
 ### 🖼️ Image
@@ -51,10 +62,15 @@ Add elements to your card via the **Insert** menu.
 ### 📦 Containers
 Containers help you group and organize elements.
 - **Layout Types:**
-  - **Positional:** Place elements anywhere inside.
+  - **Positional:** Place elements anywhere inside using X and Y coordinates.
   - **Flow / Vertical / Horizontal:** Automatically align elements in a sequence.
-- **Backgrounds:** Set a background color and transparency (alpha) for the container area.
-- **Alignment:** Align child elements to the Left, Center, or Right.
+  - **Stack:** Layer elements on top of each other, all centered within the container.
+- **Spacing:** Set the pixel spacing between elements in Flow, Vertical, or Horizontal layouts.
+- **Backgrounds:** Set a background color (e.g., `#FFFFFF`) and transparency (alpha) for the container area. You can also use 8-digit hex codes (e.g., `#FF000088`) for color and alpha combined.
+- **Alignment:** Align child elements to the Left, Center, or Right (applicable to sequential layouts).
+- **Resizing & Locking:**
+  - **Lock Aspect Ratio:** Maintain the width-to-height ratio while resizing the container.
+  - **Locked:** Prevent any changes to the container's properties or children.
 
 ### 🔄 Conditions
 The **Condition** element allows you to show or hide parts of your card based on data. Place other elements *inside* a Condition to control their visibility.
@@ -75,8 +91,9 @@ Icons allow you to display small graphics (like mana symbols or attribute icons)
 ### Font Library
 Manage reusable font styles via `Insert > Manage Font Library`. Create a named style (e.g., "HeaderStyle") and apply it to multiple text elements. If you update the library, all linked text elements will update automatically.
 
-### Preview and Zoom
-- **Preview Mode:** (`View > Preview Mode` or `Shortcut+P`) Hides the element selection outlines for a clean look at your final card design.
+### Professional Mode and Preview
+- **Professional Mode:** (`View > Professional Mode` or `Shortcut+L`) Enables the bleed zone and a red dashed outline (bleed guide). When disabled, the canvas shows only the final card size. This setting also affects PDF export and printing—exports will include bleed only if Professional Mode is enabled.
+- **Preview Mode:** (`View > Preview Mode` or `Shortcut+P`) Hides element selection highlights and the bleed guide (if Professional Mode is on) for a clean look at your final card design.
 - **Clipped Content:** Use `View > Show Clipped Content` to see parts of elements that extend beyond the card or container boundaries.
 - **Zooming:**
     - **Zoom In:** `View > Zoom In` or `Shortcut + =`.
@@ -84,6 +101,34 @@ Manage reusable font styles via `Insert > Manage Font Library`. Create a named s
     - **Reset Zoom:** `View > Reset Zoom` or `Shortcut + 0`.
     - **Mouse Wheel:** Hold `Ctrl` (or `Cmd`) and use the mouse wheel to zoom in and out while over the card area.
     - Use the Scroll Bars to navigate the card when zoomed in.
+
+---
+
+## 🛠️ Building from Source
+
+If you want to build CardMaker yourself, you will need **Java 21** (or higher) and **Maven** installed.
+
+### Standard Build
+To compile and create the runnable shaded JAR:
+```bash
+mvn clean package -DskipTests
+```
+The resulting JAR will be in the `target/` directory.
+
+### Creating Distributions
+You can use the `dist` system property to trigger platform-specific builds using `jpackage`:
+
+- **Windows Distribution:**
+  ```bash
+  mvn clean package -Ddist=win -DskipTests
+  ```
+  Look for the bundle in `target/dist-win/`.
+
+- **Linux Distribution:**
+  ```bash
+  mvn clean package -Ddist=linux -DskipTests
+  ```
+  Look for the bundle in `target/dist-linux/`.
 
 ---
 

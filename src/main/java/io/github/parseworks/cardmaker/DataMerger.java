@@ -1,6 +1,7 @@
 package io.github.parseworks.cardmaker;
 
 import com.opencsv.CSVReader;
+import com.opencsv.CSVWriter;
 import com.opencsv.exceptions.CsvException;
 import org.w3c.dom.Document;
 import org.w3c.dom.Node;
@@ -8,15 +9,20 @@ import org.w3c.dom.NodeList;
 
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
-import java.io.FileReader;
-import java.io.IOException;
-import java.io.InputStream;
+import javax.xml.transform.OutputKeys;
+import javax.xml.transform.Transformer;
+import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.stream.StreamResult;
+import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
+import java.util.zip.ZipOutputStream;
 
 public class DataMerger {
 
@@ -130,6 +136,128 @@ public class DataMerger {
 
     public List<Map<String, String>> loadCsvData(String filePath) throws IOException, CsvException {
         return loadCsv(filePath).records;
+    }
+
+    public void saveCsv(String filePath, List<String> headers, List<Map<String, String>> records) throws IOException {
+        try (CSVWriter writer = new CSVWriter(new FileWriter(filePath))) {
+            String[] headerArray = headers.toArray(new String[0]);
+            writer.writeNext(headerArray);
+
+            for (Map<String, String> record : records) {
+                String[] values = new String[headers.size()];
+                for (int i = 0; i < headers.size(); i++) {
+                    values[i] = record.getOrDefault(headers.get(i), "");
+                }
+                writer.writeNext(values);
+            }
+        }
+    }
+
+    public void saveOds(String filePath, List<String> headers, List<Map<String, String>> records) throws IOException {
+        try {
+            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+            factory.setNamespaceAware(true);
+            DocumentBuilder builder = factory.newDocumentBuilder();
+            Document doc = builder.newDocument();
+
+            // Root element
+            org.w3c.dom.Element officeDoc = doc.createElementNS("urn:oasis:names:tc:opendocument:xmlns:office:1.0", "office:document-content");
+            officeDoc.setAttributeNS("http://www.w3.org/2000/xmlns/", "xmlns:office", "urn:oasis:names:tc:opendocument:xmlns:office:1.0");
+            officeDoc.setAttributeNS("http://www.w3.org/2000/xmlns/", "xmlns:table", "urn:oasis:names:tc:opendocument:xmlns:table:1.0");
+            officeDoc.setAttributeNS("http://www.w3.org/2000/xmlns/", "xmlns:text", "urn:oasis:names:tc:opendocument:xmlns:text:1.0");
+            doc.appendChild(officeDoc);
+
+            org.w3c.dom.Element officeBody = doc.createElementNS("urn:oasis:names:tc:opendocument:xmlns:office:1.0", "office:body");
+            officeDoc.appendChild(officeBody);
+
+            org.w3c.dom.Element officeSpreadsheet = doc.createElementNS("urn:oasis:names:tc:opendocument:xmlns:office:1.0", "office:spreadsheet");
+            officeBody.appendChild(officeSpreadsheet);
+
+            org.w3c.dom.Element table = doc.createElementNS("urn:oasis:names:tc:opendocument:xmlns:table:1.0", "table:table");
+            table.setAttributeNS("urn:oasis:names:tc:opendocument:xmlns:table:1.0", "table:name", "Sheet1");
+            officeSpreadsheet.appendChild(table);
+
+            // Header row
+            org.w3c.dom.Element headerRow = doc.createElementNS("urn:oasis:names:tc:opendocument:xmlns:table:1.0", "table:table-row");
+            table.appendChild(headerRow);
+            for (String header : headers) {
+                org.w3c.dom.Element cell = doc.createElementNS("urn:oasis:names:tc:opendocument:xmlns:table:1.0", "table:table-cell");
+                cell.setAttributeNS("urn:oasis:names:tc:opendocument:xmlns:office:1.0", "office:value-type", "string");
+                org.w3c.dom.Element p = doc.createElementNS("urn:oasis:names:tc:opendocument:xmlns:text:1.0", "text:p");
+                p.setTextContent(header);
+                cell.appendChild(p);
+                headerRow.appendChild(cell);
+            }
+
+            // Data rows
+            for (Map<String, String> record : records) {
+                org.w3c.dom.Element row = doc.createElementNS("urn:oasis:names:tc:opendocument:xmlns:table:1.0", "table:table-row");
+                table.appendChild(row);
+                for (String header : headers) {
+                    org.w3c.dom.Element cell = doc.createElementNS("urn:oasis:names:tc:opendocument:xmlns:table:1.0", "table:table-cell");
+                    cell.setAttributeNS("urn:oasis:names:tc:opendocument:xmlns:office:1.0", "office:value-type", "string");
+                    org.w3c.dom.Element p = doc.createElementNS("urn:oasis:names:tc:opendocument:xmlns:text:1.0", "text:p");
+                    p.setTextContent(record.getOrDefault(header, ""));
+                    cell.appendChild(p);
+                    row.appendChild(cell);
+                }
+            }
+
+            // Write to content.xml in memory
+            TransformerFactory transformerFactory = TransformerFactory.newInstance();
+            Transformer transformer = transformerFactory.newTransformer();
+            transformer.setOutputProperty(OutputKeys.INDENT, "yes");
+            DOMSource source = new DOMSource(doc);
+            ByteArrayOutputStream bos = new ByteArrayOutputStream();
+            StreamResult result = new StreamResult(bos);
+            transformer.transform(source, result);
+
+            // Create ODS zip file
+            try (ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(filePath))) {
+                // mimetype (must be first and uncompressed)
+                ZipEntry mimetypeEntry = new ZipEntry("mimetype");
+                mimetypeEntry.setMethod(ZipEntry.STORED);
+                byte[] mimetypeBytes = "application/vnd.oasis.opendocument.spreadsheet".getBytes(StandardCharsets.UTF_8);
+                mimetypeEntry.setSize(mimetypeBytes.length);
+                mimetypeEntry.setCrc(calculateCrc(mimetypeBytes));
+                zos.putNextEntry(mimetypeEntry);
+                zos.write(mimetypeBytes);
+                zos.closeEntry();
+
+                // content.xml
+                ZipEntry contentEntry = new ZipEntry("content.xml");
+                zos.putNextEntry(contentEntry);
+                zos.write(bos.toByteArray());
+                zos.closeEntry();
+
+                // Minimal manifest
+                ZipEntry manifestEntry = new ZipEntry("META-INF/manifest.xml");
+                zos.putNextEntry(manifestEntry);
+                String manifestContent = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
+                        "<manifest:manifest xmlns:manifest=\"urn:oasis:names:tc:opendocument:xmlns:manifest:1.0\" manifest:version=\"1.2\">\n" +
+                        " <manifest:file-entry manifest:full-path=\"/\" manifest:version=\"1.2\" manifest:media-type=\"application/vnd.oasis.opendocument.spreadsheet\"/>\n" +
+                        " <manifest:file-entry manifest:full-path=\"content.xml\" manifest:media-type=\"text/xml\"/>\n" +
+                        "</manifest:manifest>";
+                zos.write(manifestContent.getBytes(StandardCharsets.UTF_8));
+                zos.closeEntry();
+            }
+        } catch (Exception e) {
+            throw new IOException("Failed to save ODS file: " + e.getMessage(), e);
+        }
+    }
+
+    private long calculateCrc(byte[] data) {
+        java.util.zip.CRC32 crc = new java.util.zip.CRC32();
+        crc.update(data);
+        return crc.getValue();
+    }
+
+    public void saveData(String filePath, List<String> headers, List<Map<String, String>> records) throws IOException {
+        if (filePath.toLowerCase().endsWith(".ods")) {
+            saveOds(filePath, headers, records);
+        } else {
+            saveCsv(filePath, headers, records);
+        }
     }
 
     /**

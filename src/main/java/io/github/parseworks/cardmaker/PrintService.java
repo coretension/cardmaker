@@ -235,8 +235,10 @@ public class PrintService {
         int cardsPerPage = cardsPerRow * rowsPerPage;
         int startIdx = pageIndex * cardsPerPage;
         
-        double cardW = template.getDimension().getWidthPx();
-        double cardH = template.getDimension().getHeightPx();
+        boolean proMode = controller.isProfessionalMode();
+        double bleedPx = proMode ? template.getBleedMm() * (CardDimension.getDpi() / 25.4) : 0;
+        double cardW = template.getDimension().getWidthPx() + 2 * bleedPx;
+        double cardH = template.getDimension().getHeightPx() + 2 * bleedPx;
         double marginBetween = 1.0; // 1px margin between each card
         double marginEdge = 2.0; // 2px margin around the cards (on the edges of the group)
         
@@ -261,7 +263,11 @@ public class PrintService {
             }
 
             // Render card content
-            controller.renderElementsExternal(template.getElements(), cardPane, record, true);
+            Pane contentPane = new Pane();
+            contentPane.setLayoutX(bleedPx);
+            contentPane.setLayoutY(bleedPx);
+            cardPane.getChildren().add(contentPane);
+            controller.renderElementsExternal(template.getElements(), contentPane, record, true);
             
             // Apply scale to convert from UI DPI to 72 DPI (printing points)
             cardPane.getTransforms().add(new Scale(scale, scale));

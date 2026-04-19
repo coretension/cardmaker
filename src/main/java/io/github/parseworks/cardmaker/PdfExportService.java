@@ -35,7 +35,8 @@ public class PdfExportService {
     public void exportToPdf(File file) throws IOException {
         double cardWidthMm = template.getDimension().getWidthMm();
         double cardHeightMm = template.getDimension().getHeightMm();
-        double bleedMm = template.getBleedMm();
+        boolean proMode = controller.isProfessionalMode();
+        double bleedMm = proMode ? template.getBleedMm() : 0;
         
         float totalWidthPt = (float)((cardWidthMm + 2 * bleedMm) * 72 / 25.4);
         float totalHeightPt = (float)((cardHeightMm + 2 * bleedMm) * 72 / 25.4);
@@ -80,7 +81,8 @@ public class PdfExportService {
      * @return the rendered image
      */
     private BufferedImage renderCardToImage(Map<String, String> record, double dpi) {
-        double bleedMm = template.getBleedMm();
+        boolean proMode = controller.isProfessionalMode();
+        double bleedMm = proMode ? template.getBleedMm() : 0;
         double widthPx = (template.getDimension().getWidthMm() + 2 * bleedMm) * dpi / 25.4;
         double heightPx = (template.getDimension().getHeightMm() + 2 * bleedMm) * dpi / 25.4;
 

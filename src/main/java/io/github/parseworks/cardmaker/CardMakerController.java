@@ -12,6 +12,7 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.*;
+import javafx.scene.control.cell.TextFieldTableCell;
 import javafx.scene.effect.DropShadow;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
@@ -43,6 +44,7 @@ public class CardMakerController {
     @FXML private Label zoomToolbarLabel;
     @FXML private ToggleButton previewToolbarBtn;
     @FXML private CheckMenuItem previewMenuItem;
+    @FXML private CheckMenuItem proModeMenuItem;
     @FXML private Label sizeLabel;
     @FXML private Label cursorPosLabel;
     @FXML private Label coordinatesLabel;
@@ -60,6 +62,7 @@ public class CardMakerController {
     private File lastOpenedDirectory;
     private AppSettings settings;
     private boolean previewMode = false;
+    private boolean professionalMode = false;
     private boolean showClippedContent = false;
     private double zoomLevel = 1.0;
     private CardElement copiedElement;
@@ -496,7 +499,10 @@ public class CardMakerController {
             
             // Show resize handle if it's a container
             if (found instanceof Pane pane) {
-                Node handle = pane.lookup(".resize-handle");
+                Node handle = pane.getChildren().stream()
+                        .filter(n -> n.getStyleClass().contains("resize-handle"))
+                        .findFirst()
+                        .orElse(null);
                 if (handle != null) {
                     handle.setVisible(true);
                     handle.toFront();
@@ -514,10 +520,9 @@ public class CardMakerController {
         for (Node node : pane.getChildren()) {
             node.setEffect(null);
             if (node instanceof Pane childPane) {
-                Node handle = childPane.lookup(".resize-handle");
-                if (handle != null) {
-                    handle.setVisible(false);
-                }
+                childPane.getChildren().stream()
+                        .filter(n -> n.getStyleClass().contains("resize-handle"))
+                        .forEach(n -> n.setVisible(false));
                 clearAllHighlights(childPane);
             }
         }
@@ -547,7 +552,7 @@ public class CardMakerController {
     private void updateCanvasSize() {
         double width = currentTemplate.getDimension().getWidthPx();
         double height = currentTemplate.getDimension().getHeightPx();
-        double bleedPx = currentTemplate.getBleedMm() * (CardDimension.getDpi() / 25.4);
+        double bleedPx = professionalMode ? currentTemplate.getBleedMm() * (CardDimension.getDpi() / 25.4) : 0;
         
         cardCanvas.setMinWidth(width + 2 * bleedPx);
         cardCanvas.setMaxWidth(width + 2 * bleedPx);
@@ -566,7 +571,7 @@ public class CardMakerController {
 
     private void renderTemplate() {
         cardCanvas.getChildren().clear();
-        double bleedPx = currentTemplate.getBleedMm() * (CardDimension.getDpi() / 25.4);
+        double bleedPx = professionalMode ? currentTemplate.getBleedMm() * (CardDimension.getDpi() / 25.4) : 0;
         
         Map<String, String> currentRecord = (currentRecordIndex >= 0 && currentRecordIndex < csvData.size()) 
                 ? csvData.get(currentRecordIndex) : null;
@@ -579,7 +584,7 @@ public class CardMakerController {
         renderElements(currentTemplate.getElements(), contentPane, currentRecord, null, ContainerElement.LayoutType.POSITIONAL, ContainerElement.Alignment.LEFT, false, false);
         
         // Add bleed guide last so it's always visible
-        if (bleedPx > 0 && !previewMode) {
+        if (professionalMode && !previewMode) {
             javafx.scene.shape.Rectangle bleedGuide = new javafx.scene.shape.Rectangle(bleedPx, bleedPx, 
                     currentTemplate.getDimension().getWidthPx(), currentTemplate.getDimension().getHeightPx());
             bleedGuide.setFill(Color.TRANSPARENT);
@@ -628,7 +633,7 @@ public class CardMakerController {
                     node.getProperties().put("cardElement", ice);
                 }
             } else {
-                Node node = createNodeForElement(el, currentRecord, currentFont, containerLayout, containerAlignment, forFinalDesign, isLocked);
+                Node node = createNodeForElement(el, currentRecord, currentFont, containerLayout, containerAlignment, forFinalDesign, isLocked, targetPane);
                 if (node != null) {
                     targetPane.getChildren().add(node);
                     if (el instanceof ParentCardElement pe && node instanceof Pane childPane) {
@@ -695,9 +700,9 @@ public class CardMakerController {
     /**
      * Creates a JavaFX Node for a given CardElement.
      */
-    private Node createNodeForElement(CardElement el, Map<String, String> currentRecord, FontElement fontConfig, ContainerElement.LayoutType parentLayout, ContainerElement.Alignment parentAlignment, boolean forFinalDesign, boolean isLocked) {
+    private Node createNodeForElement(CardElement el, Map<String, String> currentRecord, FontElement fontConfig, ContainerElement.LayoutType parentLayout, ContainerElement.Alignment parentAlignment, boolean forFinalDesign, boolean isLocked, Pane parentPane) {
         Node node = switch (el) {
-            case TextElement te -> createTextNode(te, currentRecord, fontConfig, parentAlignment);
+            case TextElement te -> createTextNode(te, currentRecord, fontConfig, parentAlignment, parentPane);
             case ImageElement ie -> createImageNode(ie, currentRecord);
             case ContainerElement ce -> createContainerNode(ce, parentAlignment, forFinalDesign);
             case IconElement ice -> createIconFlowPane(ice, currentRecord, parentAlignment);
@@ -730,8 +735,20 @@ public class CardMakerController {
         return node;
     }
 
-    private Text createTextNode(TextElement te, Map<String, String> currentRecord, FontElement fontConfig, ContainerElement.Alignment parentAlignment) {
+    private Text createTextNode(TextElement te, Map<String, String> currentRecord, FontElement fontConfig, ContainerElement.Alignment parentAlignment, Pane parentPane) {
         Text text = new Text();
+        if (parentPane != null) {
+            text.wrappingWidthProperty().bind(javafx.beans.binding.Bindings.createDoubleBinding(
+                    () -> Math.max(0, parentPane.getWidth() - te.getX()),
+                    parentPane.widthProperty(), te.xProperty()
+            ));
+        } else {
+            // Root element, use card width
+            text.wrappingWidthProperty().bind(javafx.beans.binding.Bindings.createDoubleBinding(
+                    () -> Math.max(0, currentTemplate.getDimension().getWidthPx() - te.getX()),
+                    te.xProperty()
+            ));
+        }
         text.textProperty().bind(javafx.beans.binding.Bindings.createStringBinding(
                 () -> (currentRecord != null) ? dataMerger.merge(te.getText(), currentRecord) : te.getText(),
                 te.textProperty()
@@ -781,7 +798,6 @@ public class CardMakerController {
                     }, te.outlineColorProperty()
             ));
         }
-        text.wrappingWidthProperty().bind(te.wrappingWidthProperty());
         text.setTextAlignment(mapAlignmentToTextAlignment(parentAlignment));
         return text;
     }
@@ -948,10 +964,10 @@ public class CardMakerController {
     }
 
     private void ensureResizeHandleOnTop(Pane pane) {
-        Node handle = pane.lookup(".resize-handle");
-        if (handle != null) {
-            handle.toFront();
-        }
+        pane.getChildren().stream()
+                .filter(n -> n.getStyleClass().contains("resize-handle"))
+                .findFirst()
+                .ifPresent(Node::toFront);
     }
 
     private void makeResizable(Pane pane, ContainerElement ce) {
@@ -1246,10 +1262,6 @@ public class CardMakerController {
             propertiesPane.getChildren().add(new Label("Angle"));
             propertiesPane.getChildren().add(angleBox);
 
-            HBox wrappingWidthBox = createSliderWithNumericField(te.wrappingWidthProperty(), 0, 1000);
-            addManagedListener(te.wrappingWidthProperty(), (obs, old, newVal) -> renderTemplate());
-            propertiesPane.getChildren().add(new Label("Wrapping Width (0 for none)"));
-            propertiesPane.getChildren().add(wrappingWidthBox);
         } else if (el instanceof ImageElement ie) {
             addSectionLabel("Source");
             TextField pathField = new TextField(ie.getImagePath());
@@ -2096,26 +2108,67 @@ public class CardMakerController {
             return;
         }
 
-        Dialog<Void> dialog = new Dialog<>();
+        Dialog<ButtonType> dialog = new Dialog<>();
         dialog.setTitle("CSV Data Viewer");
         dialog.setHeaderText("Available Columns for Merge: " + 
             String.join(", ", csvHeaders.stream().map(h -> "{{" + h + "}}").toList()));
         
         TableView<Map<String, String>> tableView = new TableView<>();
+        tableView.setEditable(true);
+        
         for (String header : csvHeaders) {
             TableColumn<Map<String, String>, String> column = new TableColumn<>(header);
             column.setCellValueFactory(data -> new SimpleStringProperty(data.getValue().get(header)));
+            column.setCellFactory(TextFieldTableCell.forTableColumn());
+            column.setOnEditCommit(t -> {
+                t.getTableView().getItems().get(t.getTablePosition().getRow()).put(header, t.getNewValue());
+                renderTemplate(); // Update canvas immediately
+            });
             tableView.getColumns().add(column);
         }
         
-        tableView.getItems().addAll(csvData);
+        ObservableList<Map<String, String>> data = FXCollections.observableArrayList(csvData);
+        tableView.setItems(data);
+        
+        ButtonType saveButtonType = new ButtonType("Save to File", ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().addAll(saveButtonType, ButtonType.CLOSE);
         
         dialog.getDialogPane().setContent(tableView);
-        dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
         dialog.setResizable(true);
-        dialog.getDialogPane().setPrefSize(800, 600); // Increased size
+        dialog.getDialogPane().setPrefSize(800, 600);
         
-        dialog.showAndWait();
+        Optional<ButtonType> result = dialog.showAndWait();
+        if (result.isPresent() && result.get() == saveButtonType) {
+            csvData = new ArrayList<>(data);
+            if (currentTemplate.getCsvPath() != null) {
+                try {
+                    dataMerger.saveData(currentTemplate.getCsvPath(), csvHeaders, csvData);
+                    Alert alert = new Alert(Alert.AlertType.INFORMATION, "Data saved to " + currentTemplate.getCsvPath());
+                    alert.show();
+                } catch (IOException e) {
+                    Alert alert = new Alert(Alert.AlertType.ERROR, "Failed to save data: " + e.getMessage());
+                    alert.show();
+                }
+            } else {
+                // Should not happen if data is loaded, but as a fallback:
+                FileChooser fileChooser = new FileChooser();
+                fileChooser.setTitle("Save Data As");
+                fileChooser.getExtensionFilters().addAll(
+                        new FileChooser.ExtensionFilter("CSV Files", "*.csv"),
+                        new FileChooser.ExtensionFilter("ODS Files", "*.ods")
+                );
+                File file = fileChooser.showSaveDialog(propertiesPane.getScene().getWindow());
+                if (file != null) {
+                    try {
+                        dataMerger.saveData(file.getAbsolutePath(), csvHeaders, csvData);
+                        currentTemplate.setCsvPath(file.getAbsolutePath());
+                    } catch (IOException e) {
+                        Alert alert = new Alert(Alert.AlertType.ERROR, "Failed to save data: " + e.getMessage());
+                        alert.show();
+                    }
+                }
+            }
+        }
     }
 
     @FXML
@@ -2209,6 +2262,20 @@ public class CardMakerController {
         saveTempDeck();
         saveSettings();
         javafx.application.Platform.exit();
+    }
+
+    public boolean isProfessionalMode() {
+        return professionalMode;
+    }
+
+    @FXML
+    void handleToggleProfessionalMode(ActionEvent event) {
+        if (event.getSource() instanceof CheckMenuItem ci) {
+            professionalMode = ci.isSelected();
+        }
+        if (proModeMenuItem != null) proModeMenuItem.setSelected(professionalMode);
+        updateCanvasSize();
+        renderTemplate();
     }
 
     @FXML
@@ -2311,6 +2378,8 @@ public class CardMakerController {
     private void loadSettings() {
         try {
             settings = DeckStorage.loadSettings();
+            professionalMode = settings.isProfessionalMode();
+            if (proModeMenuItem != null) proModeMenuItem.setSelected(professionalMode);
             if (settings.getLastOpenedDeckPath() != null) {
                 lastOpenedDirectory = new File(settings.getLastOpenedDeckPath()).getParentFile();
             }
@@ -2322,6 +2391,7 @@ public class CardMakerController {
 
     void saveSettings() {
         try {
+            settings.setProfessionalMode(professionalMode);
             DeckStorage.saveSettings(settings);
         } catch (IOException e) {
             System.err.println("Failed to save settings: " + e.getMessage());

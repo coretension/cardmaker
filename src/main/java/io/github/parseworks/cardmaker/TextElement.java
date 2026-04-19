@@ -23,8 +23,6 @@ public class TextElement extends CardElement {
     private final DoubleProperty outlineWidth = new SimpleDoubleProperty(0);
     /** The color of the text outline in hex format. */
     private final StringProperty outlineColor = new SimpleStringProperty("#000000");
-    /** The width at which text should wrap to the next line. */
-    private final DoubleProperty wrappingWidth = new SimpleDoubleProperty(0);
     /** The name of the font configuration to use from the library. */
     private final StringProperty fontConfigName = new SimpleStringProperty("Default");
 
@@ -91,13 +89,6 @@ public class TextElement extends CardElement {
     @JsonIgnore
     public StringProperty outlineColorProperty() { return outlineColor; }
 
-    /** @return the wrapping width */
-    public double getWrappingWidth() { return wrappingWidth.get(); }
-    /** @param value the wrapping width to set */
-    public void setWrappingWidth(double value) { wrappingWidth.set(value); }
-    /** @return the wrapping width property */
-    @JsonIgnore
-    public DoubleProperty wrappingWidthProperty() { return wrappingWidth; }
 
     /** @return the font configuration name */
     public String getFontConfigName() { return fontConfigName.get(); }
