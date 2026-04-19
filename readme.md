@@ -4,8 +4,8 @@ This project is a tool for creating and managing custom card game templates and 
 
 ![CardMaker Preview](resources/img.png)
 
-## How to Download and Run (Windows)
-
+## How to Download and Run
+### Windows
 To get started with CardMaker on Windows, follow these steps:
 
 1. **Download the Zip File**: 
@@ -17,6 +17,14 @@ To get started with CardMaker on Windows, follow these steps:
    - Look for the `cardmaker` directory.
    - Run the `cardmaker.exe` (or use the provided batch file if available).
    - Alternatively, if you have Maven installed, you can run `./mvnw javafx:run` from the root directory.
+
+### macOS
+To run on macOS:
+1. **Prerequisites**: Ensure you have Java 21 or later installed.
+2. **Build and Run**:
+   - Clone the repository.
+   - Run `./mvnw javafx:run` to run the application directly.
+   - To build a native app image: `./mvnw package -Ddist=mac` (requires building on macOS).
 
 ## Documentation
 
