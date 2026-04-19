@@ -6,7 +6,7 @@
 
     <groupId>io.github.coretension</groupId>
     <artifactId>cardmaker</artifactId>
-    <version>0.1.0</version>
+    <version>0.1.1-SNAPSHOT</version>
     <name>cardmaker</name>
 
     <properties>
@@ -178,6 +178,26 @@
                     </execution>
                 </executions>
             </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>3.1.0</version>
+                <executions>
+                    <execution>
+                        <id>copy-shaded-jar</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <mkdir dir="${project.build.directory}/dist-input"/>
+                                <copy file="${project.build.directory}/${project.build.finalName}.jar" todir="${project.build.directory}/dist-input"/>
+                            </target>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
     </build>
 
@@ -209,7 +229,7 @@
                                         <argument>--name</argument>
                                         <argument>cardmaker</argument>
                                         <argument>--input</argument>
-                                        <argument>${project.build.directory}</argument>
+                                        <argument>${project.build.directory}/dist-input</argument>
                                         <argument>--main-jar</argument>
                                         <argument>${project.build.finalName}.jar</argument>
                                         <argument>--main-class</argument>
@@ -253,7 +273,7 @@
                                         <argument>--name</argument>
                                         <argument>cardmaker</argument>
                                         <argument>--input</argument>
-                                        <argument>${project.build.directory}</argument>
+                                        <argument>${project.build.directory}/dist-input</argument>
                                         <argument>--main-jar</argument>
                                         <argument>${project.build.finalName}.jar</argument>
                                         <argument>--main-class</argument>
@@ -262,9 +282,6 @@
                                         <argument>app-image</argument>
                                         <argument>--dest</argument>
                                         <argument>${project.build.directory}/dist-win</argument>
-                                        <argument>--win-dir-chooser</argument>
-                                        <argument>--win-menu</argument>
-                                        <argument>--win-shortcut</argument>
                                     </arguments>
                                 </configuration>
                             </execution>
