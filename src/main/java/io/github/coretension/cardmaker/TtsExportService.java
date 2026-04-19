@@ -94,6 +94,10 @@ public class TtsExportService {
         root.setMaxSize(widthPx, heightPx);
         root.setStyle("-fx-background-color: white;");
 
+        // Apply clipping to the root to simulate preview mode (everything clipped to card + bleed)
+        javafx.scene.shape.Rectangle clip = new javafx.scene.shape.Rectangle(widthPx, heightPx);
+        root.setClip(clip);
+
         double scale = dpi / CardDimension.getDpi();
         Pane contentPane = new Pane();
         double bleedPx = bleedMm * dpi / 25.4;
@@ -108,6 +112,18 @@ public class TtsExportService {
         root.getChildren().add(contentPane);
 
         controller.renderElementsExternal(template.getElements(), contentPane, record, true);
+
+        // Add bleed guide (outline) if professional mode is on
+        if (proMode) {
+            double cardWidthPx = template.getDimension().getWidthMm() * dpi / 25.4;
+            double cardHeightPx = template.getDimension().getHeightMm() * dpi / 25.4;
+            javafx.scene.shape.Rectangle bleedGuide = new javafx.scene.shape.Rectangle(bleedPx, bleedPx, cardWidthPx, cardHeightPx);
+            bleedGuide.setFill(javafx.scene.paint.Color.TRANSPARENT);
+            bleedGuide.setStroke(javafx.scene.paint.Color.RED);
+            bleedGuide.setStrokeWidth(1);
+            bleedGuide.getStrokeDashArray().addAll(5.0, 5.0);
+            root.getChildren().add(bleedGuide);
+        }
 
         new Scene(root); 
 
