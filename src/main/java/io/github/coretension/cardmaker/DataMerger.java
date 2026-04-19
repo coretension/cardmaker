@@ -137,9 +137,6 @@ public class DataMerger {
         return sb.toString();
     }
 
-    public List<Map<String, String>> loadCsvData(String filePath) throws IOException, CsvException {
-        return loadCsv(filePath).records;
-    }
 
     public void saveCsv(String filePath, List<String> headers, List<Map<String, String>> records) throws IOException {
         try (CSVWriter writer = new CSVWriter(new FileWriter(filePath))) {

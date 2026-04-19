@@ -15,7 +15,6 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.*;
-import javafx.scene.control.cell.TextFieldTableCell;
 import javafx.scene.effect.DropShadow;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
@@ -599,13 +598,6 @@ public class CardMakerController {
         return null;
     }
 
-    private boolean hasOverflowingImage(ObservableList<CardElement> elements) {
-        for (CardElement el : elements) {
-            if (el instanceof ImageElement ie && ie.isAllowOverflow()) return true;
-            if (el instanceof ParentCardElement pe && hasOverflowingImage(pe.getChildren())) return true;
-        }
-        return false;
-    }
 
     private void updateCanvasSize() {
         double width = currentTemplate.getDimension().getWidthPx();
@@ -2224,10 +2216,8 @@ public class CardMakerController {
                 if (t.getCode() == KeyCode.ENTER) {
                     if (t.isControlDown()) {
                         textArea.insertText(textArea.getCaretPosition(), "\n");
-                    } else {
-                        commitEdit(textArea.getText());
+                        t.consume();
                     }
-                    t.consume();
                 } else if (t.getCode() == KeyCode.ESCAPE) {
                     cancelEdit();
                     t.consume();
