@@ -1,4 +1,4 @@
-module io.github.parseworks.cardmaker {
+module io.github.coretension.cardmaker {
     requires javafx.controls;
     requires javafx.fxml;
     requires javafx.swing;
@@ -13,6 +13,6 @@ module io.github.parseworks.cardmaker {
     requires com.fasterxml.jackson.databind;
     requires com.github.librepdf.openpdf;
 
-    opens io.github.parseworks.cardmaker to javafx.fxml, com.fasterxml.jackson.databind;
-    exports io.github.parseworks.cardmaker;
+    opens io.github.coretension.cardmaker to javafx.fxml, com.fasterxml.jackson.databind;
+    exports io.github.coretension.cardmaker;
 }

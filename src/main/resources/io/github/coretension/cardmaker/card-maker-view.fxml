@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.input.KeyCombination?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.canvas.Canvas?>
+<?import javafx.scene.Group?>
+
+<BorderPane xmlns:fx="http://javafx.com/fxml" fx:controller="io.github.coretension.cardmaker.CardMakerController">
+    <top>
+        <VBox>
+            <MenuBar>
+                <Menu text="File">
+                    <MenuItem text="New Deck" onAction="#handleNewDeck"/>
+                    <MenuItem text="Open Deck" onAction="#handleOpenDeck"/>
+                    <MenuItem text="Save Deck" onAction="#handleSaveDeck" accelerator="Shortcut+S"/>
+                    <MenuItem text="Save Deck As..." onAction="#handleSaveDeckAs"/>
+                    <SeparatorMenuItem/>
+                    <MenuItem text="Load CSV" onAction="#handleLoadCsv"/>
+                    <MenuItem text="View CSV Data" onAction="#handleViewData"/>
+                    <MenuItem text="Print Deck" onAction="#handlePrintDeck"/>
+                    <MenuItem text="Export to PDF (CMYK)" onAction="#handleExportPdf"/>
+                    <MenuItem text="Export to TTS Deck Sheet" onAction="#handleExportTts"/>
+                    <SeparatorMenuItem/>
+                    <MenuItem text="Settings" onAction="#handleSettings"/>
+                    <SeparatorMenuItem/>
+                    <MenuItem text="Exit" onAction="#handleExit"/>
+                </Menu>
+                <Menu text="View">
+                    <CheckMenuItem fx:id="proModeMenuItem" text="Professional Mode" onAction="#handleToggleProfessionalMode" accelerator="Shortcut+L"/>
+                    <CheckMenuItem fx:id="previewMenuItem" text="Preview Mode" onAction="#handleTogglePreviewMode" accelerator="Shortcut+P"/>
+                    <CheckMenuItem text="Show Clipped Content" onAction="#handleToggleShowClippedContent"/>
+                    <SeparatorMenuItem/>
+                    <MenuItem text="Zoom In" onAction="#handleZoomIn" accelerator="Shortcut+EQUALS"/>
+                    <MenuItem text="Zoom Out" onAction="#handleZoomOut" accelerator="Shortcut+MINUS"/>
+                    <MenuItem text="Reset Zoom" onAction="#handleResetZoom" accelerator="Shortcut+0"/>
+                </Menu>
+                <Menu text="Insert">
+                    <MenuItem text="Add Text" onAction="#handleAddText"/>
+                    <MenuItem text="Add Image" onAction="#handleAddImage"/>
+                    <MenuItem text="Add Icons" onAction="#handleAddIcon"/>
+                    <MenuItem text="Add Condition" onAction="#handleAddCondition"/>
+                    <MenuItem text="Add Container" onAction="#handleAddContainer"/>
+                    <MenuItem text="Add Font Config" onAction="#handleAddFont"/>
+                    <SeparatorMenuItem/>
+                    <MenuItem text="Manage Icon Library" onAction="#handleManageIconLibrary"/>
+                    <MenuItem text="Manage Font Library" onAction="#handleManageFontLibrary"/>
+                </Menu>
+            </MenuBar>
+            <ToolBar>
+                <Button onAction="#handleNewDeck">
+                    <tooltip><Tooltip text="New Deck"/></tooltip>
+                    <graphic>
+                        <Label text="📄" style="-fx-font-size: 1.2em;"/>
+                    </graphic>
+                </Button>
+                <Button onAction="#handleOpenDeck">
+                    <tooltip><Tooltip text="Open Deck"/></tooltip>
+                    <graphic>
+                        <Label text="📂" style="-fx-font-size: 1.2em;"/>
+                    </graphic>
+                </Button>
+                <Button onAction="#handleSaveDeck">
+                    <tooltip><Tooltip text="Save Deck"/></tooltip>
+                    <graphic>
+                        <Label text="💾" style="-fx-font-size: 1.2em;"/>
+                    </graphic>
+                </Button>
+                <Separator/>
+                <Button text="+Text" onAction="#handleAddText">
+                    <tooltip><Tooltip text="Add Text Element"/></tooltip>
+                </Button>
+                <Button text="+Img" onAction="#handleAddImage">
+                    <tooltip><Tooltip text="Add Image Element"/></tooltip>
+                </Button>
+                <Button text="+Icon" onAction="#handleAddIcon">
+                    <tooltip><Tooltip text="Add Icon Element"/></tooltip>
+                </Button>
+                <Button text="+Box" onAction="#handleAddContainer">
+                    <tooltip><Tooltip text="Add Container"/></tooltip>
+                </Button>
+                <Separator/>
+                <ToggleButton fx:id="previewToolbarBtn" text="Preview" onAction="#handleTogglePreviewMode"/>
+                <Separator/>
+                <Button onAction="#handleZoomOut" text="-"/>
+                <Label fx:id="zoomToolbarLabel" text="100%" minWidth="40" alignment="CENTER"/>
+                <Button onAction="#handleZoomIn" text="+"/>
+            </ToolBar>
+        </VBox>
+    </top>
+    <left>
+        <VBox spacing="10" prefWidth="200" style="-fx-background-color: #eee;">
+            <padding>
+                <Insets top="10" right="10" bottom="10" left="10"/>
+            </padding>
+            <Label text="Elements" style="-fx-font-weight: bold;"/>
+            <TreeView fx:id="elementTreeView" VBox.vgrow="ALWAYS"/>
+        </VBox>
+    </left>
+    <center>
+        <StackPane fx:id="displayStack">
+            <ScrollPane fitToHeight="true" fitToWidth="true" style="-fx-background-color: #999;">
+                <StackPane fx:id="canvasContainer">
+                    <Group>
+                        <Pane fx:id="cardCanvas" pickOnBounds="true" style="-fx-background-color: white; -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.4), 10, 0, 0, 0);"/>
+                    </Group>
+                </StackPane>
+            </ScrollPane>
+            <Label fx:id="sizeLabel" text="0x0 mm" StackPane.alignment="BOTTOM_LEFT" mouseTransparent="true" style="-fx-background-color: rgba(0,0,0,0.5); -fx-text-fill: white; -fx-padding: 5; -fx-background-radius: 5;">
+                <StackPane.margin>
+                    <Insets bottom="10" left="10"/>
+                </StackPane.margin>
+            </Label>
+            <Label fx:id="zoomLabel" text="100%" StackPane.alignment="BOTTOM_RIGHT" mouseTransparent="true" style="-fx-background-color: rgba(0,0,0,0.5); -fx-text-fill: white; -fx-padding: 5; -fx-background-radius: 5;">
+                <StackPane.margin>
+                    <Insets bottom="10" right="10"/>
+                </StackPane.margin>
+            </Label>
+            <Label fx:id="coordinatesLabel" text="X: 0, Y: 0" visible="false" StackPane.alignment="TOP_RIGHT" mouseTransparent="true" style="-fx-background-color: rgba(0,0,0,0.5); -fx-text-fill: white; -fx-padding: 5; -fx-background-radius: 5;">
+                <StackPane.margin>
+                    <Insets top="10" right="10"/>
+                </StackPane.margin>
+            </Label>
+        </StackPane>
+    </center>
+    <right>
+        <ScrollPane fitToWidth="true" hbarPolicy="NEVER" prefWidth="250" style="-fx-background-color: #eee;">
+            <VBox spacing="10">
+                <padding>
+                    <Insets top="10" right="10" bottom="10" left="10"/>
+                </padding>
+                <Label text="Properties" style="-fx-font-weight: bold;"/>
+                <VBox fx:id="propertiesPane" spacing="10"/>
+                <Separator/>
+                <Label text="Data Preview" style="-fx-font-weight: bold;"/>
+                <HBox spacing="5" alignment="CENTER">
+                    <Button text="&lt;" onAction="#handlePrevRecord"/>
+                    <Label fx:id="recordLabel" text="0 / 0"/>
+                    <Button text="&gt;" onAction="#handleNextRecord"/>
+                    <Button text="View" onAction="#handleViewData"/>
+                </HBox>
+            </VBox>
+        </ScrollPane>
+    </right>
+    <bottom>
+        <HBox spacing="10" style="-fx-background-color: #ddd; -fx-padding: 3 10 3 10; -fx-border-color: #ccc; -fx-border-width: 1 0 0 0;" alignment="CENTER_LEFT">
+            <Label fx:id="statusLabel" text="Ready"/>
+            <Pane HBox.hgrow="ALWAYS"/>
+            <Separator orientation="VERTICAL"/>
+            <Label fx:id="cursorPosLabel" text="X: 0, Y: 0"/>
+        </HBox>
+    </bottom>
+</BorderPane>
