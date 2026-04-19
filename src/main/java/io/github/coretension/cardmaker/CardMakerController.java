@@ -69,6 +69,7 @@ public class CardMakerController {
     private boolean showClippedContent = false;
     private double zoomLevel = 1.0;
     private CardElement copiedElement;
+    private long lastCsvModificationTime = 0;
 
     @FXML
     public void initialize() {
@@ -79,6 +80,7 @@ public class CardMakerController {
         setupZoomListeners();
         updateTitleAndStatus();
         setupAutoSaveTimeline();
+        setupCsvWatchTimeline();
         
         checkForRecovery();
         
@@ -1655,8 +1657,13 @@ public class CardMakerController {
             csvData = result.records;
             csvHeaders = result.headers;
             currentTemplate.setCsvPath(file.getAbsolutePath());
+            lastCsvModificationTime = file.lastModified();
             if (!csvData.isEmpty()) {
-                currentRecordIndex = 0;
+                if (currentRecordIndex >= csvData.size()) {
+                    currentRecordIndex = 0;
+                } else if (currentRecordIndex < 0) {
+                    currentRecordIndex = 0;
+                }
             } else {
                 currentRecordIndex = -1;
             }
@@ -2157,6 +2164,91 @@ public class CardMakerController {
         }
     }
 
+    private static class TextAreaTableCell<S> extends TableCell<S, String> {
+        private TextArea textArea;
+
+        public TextAreaTableCell() {
+            this.getStyleClass().add("text-area-table-cell");
+        }
+
+        @Override
+        public void startEdit() {
+            if (!isEditable() || !getTableView().isEditable() || !getTableColumn().isEditable()) {
+                return;
+            }
+            super.startEdit();
+            if (textArea == null) {
+                createTextArea();
+            }
+            setText(null);
+            setGraphic(textArea);
+            textArea.setText(getItem());
+            textArea.selectAll();
+            textArea.requestFocus();
+        }
+
+        @Override
+        public void cancelEdit() {
+            super.cancelEdit();
+            setText(getItem());
+            setGraphic(null);
+        }
+
+        @Override
+        public void updateItem(String item, boolean empty) {
+            super.updateItem(item, empty);
+            if (empty) {
+                setText(null);
+                setGraphic(null);
+            } else {
+                if (isEditing()) {
+                    if (textArea != null) {
+                        textArea.setText(item);
+                    }
+                    setText(null);
+                    setGraphic(textArea);
+                } else {
+                    setText(item);
+                    setGraphic(null);
+                }
+            }
+        }
+
+        private void createTextArea() {
+            textArea = new TextArea(getItem());
+            textArea.setWrapText(true);
+            textArea.setPrefRowCount(3);
+            // Limit height so it doesn't take over the whole dialog
+            textArea.setMaxHeight(100);
+            textArea.setOnKeyPressed(t -> {
+                if (t.getCode() == KeyCode.ENTER) {
+                    if (t.isControlDown()) {
+                        textArea.insertText(textArea.getCaretPosition(), "\n");
+                    } else {
+                        commitEdit(textArea.getText());
+                    }
+                    t.consume();
+                } else if (t.getCode() == KeyCode.ESCAPE) {
+                    cancelEdit();
+                    t.consume();
+                }
+            });
+            textArea.focusedProperty().addListener((observable, oldValue, newValue) -> {
+                if (!newValue) {
+                    commitEdit(textArea.getText());
+                }
+            });
+
+            // Prevent ENTER from being propagated to the Dialog if it should commit the edit
+            textArea.addEventFilter(KeyEvent.KEY_PRESSED, t -> {
+                if (t.getCode() == KeyCode.ENTER && !t.isControlDown()) {
+                    commitEdit(textArea.getText());
+                    t.consume();
+                }
+            });
+        }
+    }
+
     @FXML
     void handleViewData(ActionEvent event) {
         if (csvData.isEmpty()) {
@@ -2179,17 +2271,32 @@ public class CardMakerController {
         for (String header : csvHeaders) {
             TableColumn<Map<String, String>, String> column = new TableColumn<>(header);
             column.setCellValueFactory(data -> new SimpleStringProperty(data.getValue().get(header)));
-            column.setCellFactory(TextFieldTableCell.forTableColumn());
+            column.setCellFactory(tc -> new TextAreaTableCell<>());
             column.setOnEditCommit(t -> {
                 t.getTableView().getItems().get(t.getTablePosition().getRow()).put(header, t.getNewValue());
+                csvData = new ArrayList<>(t.getTableView().getItems());
                 renderTemplate(); // Update canvas immediately
+                t.getTableView().refresh();
             });
             tableView.getColumns().add(column);
         }
         
         ObservableList<Map<String, String>> data = FXCollections.observableArrayList(csvData);
         tableView.setItems(data);
-        
+
+        // Update cell on Enter
+        tableView.addEventFilter(KeyEvent.KEY_PRESSED, ke -> {
+            if (ke.getCode() == KeyCode.ENTER) {
+                if (tableView.getEditingCell() == null) {
+                    TablePosition pos = tableView.getFocusModel().getFocusedCell();
+                    if (pos != null && pos.getColumn() != -1) {
+                        tableView.edit(pos.getRow(), pos.getTableColumn());
+                    }
+                    ke.consume();
+                }
+            }
+        });
+
         ButtonType saveButtonType = new ButtonType("Save to File", ButtonBar.ButtonData.OK_DONE);
         dialog.getDialogPane().getButtonTypes().addAll(saveButtonType, ButtonType.CLOSE);
         
@@ -2571,6 +2678,24 @@ public class CardMakerController {
         Timeline timeline = new Timeline(new KeyFrame(javafx.util.Duration.seconds(30), event -> {
             if (currentFile != null) {
                 saveToFile(currentFile);
+            }
+        }));
+        timeline.setCycleCount(Animation.INDEFINITE);
+        timeline.play();
+    }
+
+    private void setupCsvWatchTimeline() {
+        Timeline timeline = new Timeline(new KeyFrame(javafx.util.Duration.seconds(5), event -> {
+            String csvPath = currentTemplate.getCsvPath();
+            if (csvPath != null) {
+                File file = new File(csvPath);
+                if (file.exists()) {
+                    long lastModified = file.lastModified();
+                    if (lastCsvModificationTime != 0 && lastModified > lastCsvModificationTime) {
+                        loadCsvFile(file);
+                    }
+                    lastCsvModificationTime = lastModified;
+                }
             }
         }));
         timeline.setCycleCount(Animation.INDEFINITE);

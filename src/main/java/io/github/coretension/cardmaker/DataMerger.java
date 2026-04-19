@@ -128,6 +128,9 @@ public class DataMerger {
         for (int i = 0; i < textNodes.getLength(); i++) {
             Node node = textNodes.item(i);
             if ("p".equals(node.getLocalName())) {
+                if (sb.length() > 0) {
+                    sb.append("\n");
+                }
                 sb.append(node.getTextContent());
             }
         }
@@ -196,9 +199,13 @@ public class DataMerger {
                 for (String header : headers) {
                     org.w3c.dom.Element cell = doc.createElementNS("urn:oasis:names:tc:opendocument:xmlns:table:1.0", "table:table-cell");
                     cell.setAttributeNS("urn:oasis:names:tc:opendocument:xmlns:office:1.0", "office:value-type", "string");
-                    org.w3c.dom.Element p = doc.createElementNS("urn:oasis:names:tc:opendocument:xmlns:text:1.0", "text:p");
-                    p.setTextContent(record.getOrDefault(header, ""));
-                    cell.appendChild(p);
+                    String value = record.getOrDefault(header, "");
+                    String[] lines = value.split("\n", -1);
+                    for (String line : lines) {
+                        org.w3c.dom.Element p = doc.createElementNS("urn:oasis:names:tc:opendocument:xmlns:text:1.0", "text:p");
+                        p.setTextContent(line);
+                        cell.appendChild(p);
+                    }
                     row.appendChild(cell);
                 }
             }
