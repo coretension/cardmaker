@@ -182,10 +182,34 @@ public class CardMakerController {
                     event.acceptTransferModes(TransferMode.MOVE);
                     
                     // Visual feedback for drop position
+                    TreeItem<CardElement> targetItem = cell.getTreeItem();
+                    int depth = 0;
+                    TreeItem<CardElement> parent = targetItem;
+                    while (parent != null && parent.getParent() != null) {
+                        depth++;
+                        parent = parent.getParent();
+                    }
+                    
+                    boolean isTopLevel = depth == 0;
+                    String color;
+                    if (isTopLevel) {
+                        color = "#0096C9"; // Blue for top level
+                    } else {
+                        // High contrast colors based on depth
+                        color = switch (depth % 5) {
+                            case 1 -> "#4CAF50"; // Green
+                            case 2 -> "#FF9800"; // Orange
+                            case 3 -> "#E91E63"; // Pink
+                            case 4 -> "#9C27B0"; // Purple
+                            default -> "#F44336"; // Red (depth 5, 10...)
+                        };
+                    }
+                    int thickness = 3 + depth; // Increases with depth
+
                     if (event.getY() < cell.getHeight() * 0.25) {
-                        cell.setStyle("-fx-border-color: #0096C9; -fx-border-width: 2 0 0 0;");
+                        cell.setStyle(String.format("-fx-border-color: %s; -fx-border-width: %d 0 0 0;", color, thickness));
                     } else if (event.getY() > cell.getHeight() * 0.75) {
-                        cell.setStyle("-fx-border-color: #0096C9; -fx-border-width: 0 0 2 0;");
+                        cell.setStyle(String.format("-fx-border-color: %s; -fx-border-width: 0 0 %d 0;", color, thickness));
                     } else {
                         cell.setStyle("-fx-background-color: #E9F6FD;");
                     }
