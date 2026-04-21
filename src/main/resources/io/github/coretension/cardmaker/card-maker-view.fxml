@@ -36,6 +36,10 @@
                     <MenuItem text="Zoom Out" onAction="#handleZoomOut" accelerator="Shortcut+MINUS"/>
                     <MenuItem text="Reset Zoom" onAction="#handleResetZoom" accelerator="Shortcut+0"/>
                 </Menu>
+                <Menu text="Edit">
+                    <MenuItem text="Manage Icon Library" onAction="#handleManageIconLibrary"/>
+                    <MenuItem text="Manage Font Library" onAction="#handleManageFontLibrary"/>
+                </Menu>
                 <Menu text="Insert">
                     <MenuItem text="Add Text" onAction="#handleAddText"/>
                     <MenuItem text="Add Image" onAction="#handleAddImage"/>
@@ -43,9 +47,6 @@
                     <MenuItem text="Add Condition" onAction="#handleAddCondition"/>
                     <MenuItem text="Add Container" onAction="#handleAddContainer"/>
                     <MenuItem text="Add Font Config" onAction="#handleAddFont"/>
-                    <SeparatorMenuItem/>
-                    <MenuItem text="Manage Icon Library" onAction="#handleManageIconLibrary"/>
-                    <MenuItem text="Manage Font Library" onAction="#handleManageFontLibrary"/>
                 </Menu>
             </MenuBar>
             <ToolBar>

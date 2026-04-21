@@ -14,6 +14,7 @@ import javafx.fxml.FXML;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
+import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.effect.DropShadow;
 import javafx.scene.image.Image;
@@ -69,6 +70,8 @@ public class CardMakerController {
     private double zoomLevel = 1.0;
     private CardElement copiedElement;
     private long lastCsvModificationTime = 0;
+    private Stage iconLibraryStage;
+    private Stage fontLibraryStage;
 
     @FXML
     public void initialize() {
@@ -1732,10 +1735,13 @@ public class CardMakerController {
 
     @FXML
     public void handleManageIconLibrary(ActionEvent event) {
-        Dialog<Void> dialog = new Dialog<>();
-        dialog.setTitle("Manage Icon Library");
-        dialog.setHeaderText("Create and manage named icon mappings for your deck.");
-        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.CLOSE);
+        if (iconLibraryStage != null && iconLibraryStage.isShowing()) {
+            iconLibraryStage.toFront();
+            return;
+        }
+
+        iconLibraryStage = new Stage();
+        iconLibraryStage.setTitle("Manage Icon Library");
 
         VBox content = new VBox(15);
         content.setPadding(new Insets(10));
@@ -1746,7 +1752,7 @@ public class CardMakerController {
         VBox mappingSection = new VBox(8);
         Label mappingLabel = new Label("Icon Mappings");
         mappingLabel.setStyle("-fx-font-weight: bold;");
-        
+
         ListView<String> mappingList = new ListView<>();
         mappingList.getItems().addAll(currentTemplate.getIconLibrary().getMappings().keySet());
         mappingList.setPrefHeight(120);
@@ -1759,7 +1765,7 @@ public class CardMakerController {
         Button addMapBtn = new Button("Add Mapping");
         Button removeMapBtn = new Button("Remove Selected");
         mappingActions.getChildren().addAll(newMapNameField, addMapBtn, removeMapBtn);
-        
+
         mappingSection.getChildren().addAll(mappingLabel, mappingList, mappingActions);
 
         // Section: Editor for selected mapping
@@ -1767,7 +1773,7 @@ public class CardMakerController {
         VBox.setVgrow(editorSection, Priority.ALWAYS);
         Label editorLabel = new Label("Mapping Editor");
         editorLabel.setStyle("-fx-font-weight: bold;");
-        
+
         VBox editorContainer = new VBox(10);
         editorContainer.setPadding(new Insets(5));
         ScrollPane editorScroll = new ScrollPane(editorContainer);
@@ -1787,20 +1793,22 @@ public class CardMakerController {
                     HBox.setHgrow(newKeyField, Priority.ALWAYS);
                     Button addKeyBtn = new Button("Add Key");
                     addKeyRow.getChildren().addAll(newKeyField, addKeyBtn);
-                    
+
                     VBox rowsContainer = new VBox(8);
-                    
+
                     addKeyBtn.setOnAction(ak -> {
                         String key = newKeyField.getText().trim();
                         if (!key.isEmpty() && !iconMap.containsKey(key)) {
                             iconMap.put(key, "");
                             addMappingRow(iconMap, key, rowsContainer);
                             newKeyField.clear();
+                            renderTemplate();
+                            updatePropertiesPane(getSelectedElement());
                         }
                     });
 
                     iconMap.keySet().stream().sorted().forEach(key -> addMappingRow(iconMap, key, rowsContainer));
-                    
+
                     editorContainer.getChildren().addAll(addKeyRow, new Separator(), rowsContainer);
                 }
             } else {
@@ -1815,6 +1823,8 @@ public class CardMakerController {
                 mappingList.getItems().add(name);
                 mappingList.getSelectionModel().select(name);
                 newMapNameField.clear();
+                renderTemplate();
+                updatePropertiesPane(getSelectedElement());
             }
         });
 
@@ -1824,9 +1834,11 @@ public class CardMakerController {
                 currentTemplate.getIconLibrary().getMappings().remove(selected);
                 mappingList.getItems().remove(selected);
                 editorContainer.getChildren().clear();
+                renderTemplate();
+                updatePropertiesPane(getSelectedElement());
             }
         });
-        
+
         // Initial state
         if (mappingList.getItems().isEmpty()) {
             editorContainer.getChildren().add(new Label("No mappings defined. Add one above."));
@@ -1836,18 +1848,21 @@ public class CardMakerController {
 
         editorSection.getChildren().addAll(new Separator(), editorLabel, editorScroll);
         content.getChildren().addAll(mappingSection, editorSection);
-        dialog.getDialogPane().setContent(content);
-        dialog.showAndWait();
-        renderTemplate();
-        updatePropertiesPane(getSelectedElement());
+
+        Scene scene = new Scene(content);
+        iconLibraryStage.setScene(scene);
+        iconLibraryStage.show();
     }
 
     @FXML
     public void handleManageFontLibrary(ActionEvent event) {
-        Dialog<Void> dialog = new Dialog<>();
-        dialog.setTitle("Manage Font Library");
-        dialog.setHeaderText("Create and manage named font configurations for your deck.");
-        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.CLOSE);
+        if (fontLibraryStage != null && fontLibraryStage.isShowing()) {
+            fontLibraryStage.toFront();
+            return;
+        }
+
+        fontLibraryStage = new Stage();
+        fontLibraryStage.setTitle("Manage Font Library");
 
         VBox content = new VBox(15);
         content.setPadding(new Insets(10));
@@ -1858,7 +1873,7 @@ public class CardMakerController {
         VBox fontSection = new VBox(8);
         Label fontLabel = new Label("Font Configurations");
         fontLabel.setStyle("-fx-font-weight: bold;");
-        
+
         ListView<String> fontList = new ListView<>();
         fontList.getItems().addAll(currentTemplate.getFontLibrary().getFonts().keySet());
         fontList.setPrefHeight(120);
@@ -1871,7 +1886,7 @@ public class CardMakerController {
         Button addFontBtn = new Button("Add Font");
         Button removeFontBtn = new Button("Remove Selected");
         fontActions.getChildren().addAll(newFontNameField, addFontBtn, removeFontBtn);
-        
+
         fontSection.getChildren().addAll(fontLabel, fontList, fontActions);
 
         // Section: Editor for selected font config
@@ -1879,7 +1894,7 @@ public class CardMakerController {
         VBox.setVgrow(editorSection, Priority.ALWAYS);
         Label editorLabel = new Label("Font Editor");
         editorLabel.setStyle("-fx-font-weight: bold;");
-        
+
         VBox editorContainer = new VBox(10);
         editorContainer.setPadding(new Insets(5));
         ScrollPane editorScroll = new ScrollPane(editorContainer);
@@ -1893,35 +1908,69 @@ public class CardMakerController {
                 FontElement fontEl = currentTemplate.getFontLibrary().getFonts().get(newVal);
                 if (fontEl != null) {
                     VBox props = new VBox(5);
-                    
+
                     ComboBox<String> familyBox = new ComboBox<>(FXCollections.observableArrayList(Font.getFamilies()));
                     familyBox.setValue(fontEl.getFontFamily());
                     familyBox.setMaxWidth(Double.MAX_VALUE);
                     fontEl.fontFamilyProperty().bind(familyBox.valueProperty());
-                    
+                    familyBox.valueProperty().addListener((o, ov, nv) -> {
+                        renderTemplate();
+                        updatePropertiesPane(getSelectedElement());
+                    });
+
                     HBox sizeBox = createSliderWithNumericField(fontEl.fontSizeProperty(), 8, 120);
-                    
+                    fontEl.fontSizeProperty().addListener((o, ov, nv) -> {
+                        renderTemplate();
+                        updatePropertiesPane(getSelectedElement());
+                    });
+
                     ComboBox<FontWeight> weightBox = new ComboBox<>(FXCollections.observableArrayList(FontWeight.values()));
                     weightBox.setValue(fontEl.getFontWeight());
                     weightBox.setMaxWidth(Double.MAX_VALUE);
                     fontEl.fontWeightProperty().bind(weightBox.valueProperty());
-                    
+                    weightBox.valueProperty().addListener((o, ov, nv) -> {
+                        renderTemplate();
+                        updatePropertiesPane(getSelectedElement());
+                    });
+
                     ComboBox<FontPosture> postureBox = new ComboBox<>(FXCollections.observableArrayList(FontPosture.values()));
                     postureBox.setValue(fontEl.getFontPosture());
                     postureBox.setMaxWidth(Double.MAX_VALUE);
                     fontEl.fontPostureProperty().bind(postureBox.valueProperty());
-                    
+                    postureBox.valueProperty().addListener((o, ov, nv) -> {
+                        renderTemplate();
+                        updatePropertiesPane(getSelectedElement());
+                    });
+
                     ColorPicker colorPicker = new ColorPicker(Color.web(fontEl.getColor()));
                     colorPicker.setStyle("-fx-color-label-visible: true;");
                     colorPicker.setMaxWidth(Double.MAX_VALUE);
-                    colorPicker.setOnAction(ce -> fontEl.setColor(toHexString(colorPicker.getValue())));
+                    colorPicker.setOnAction(ce -> {
+                        fontEl.setColor(toHexString(colorPicker.getValue()));
+                        renderTemplate();
+                        updatePropertiesPane(getSelectedElement());
+                    });
 
                     HBox angleBox = createSliderWithNumericField(fontEl.angleProperty(), -360, 360);
+                    fontEl.angleProperty().addListener((o, ov, nv) -> {
+                        renderTemplate();
+                        updatePropertiesPane(getSelectedElement());
+                    });
+
                     HBox outlineWidthBox = createSliderWithNumericField(fontEl.outlineWidthProperty(), 0, 20);
+                    fontEl.outlineWidthProperty().addListener((o, ov, nv) -> {
+                        renderTemplate();
+                        updatePropertiesPane(getSelectedElement());
+                    });
+
                     ColorPicker outlineColorPicker = new ColorPicker(Color.web(fontEl.getOutlineColor()));
                     outlineColorPicker.setStyle("-fx-color-label-visible: true;");
                     outlineColorPicker.setMaxWidth(Double.MAX_VALUE);
-                    outlineColorPicker.setOnAction(ce -> fontEl.setOutlineColor(toHexString(outlineColorPicker.getValue())));
+                    outlineColorPicker.setOnAction(ce -> {
+                        fontEl.setOutlineColor(toHexString(outlineColorPicker.getValue()));
+                        renderTemplate();
+                        updatePropertiesPane(getSelectedElement());
+                    });
 
                     props.getChildren().addAll(
                         new Label("Font Family"), familyBox,
@@ -1947,6 +1996,8 @@ public class CardMakerController {
                 fontList.getItems().add(name);
                 fontList.getSelectionModel().select(name);
                 newFontNameField.clear();
+                renderTemplate();
+                updatePropertiesPane(getSelectedElement());
             }
         });
 
@@ -1956,9 +2007,11 @@ public class CardMakerController {
                 currentTemplate.getFontLibrary().getFonts().remove(selected);
                 fontList.getItems().remove(selected);
                 editorContainer.getChildren().clear();
+                renderTemplate();
+                updatePropertiesPane(getSelectedElement());
             }
         });
-        
+
         // Initial state
         if (fontList.getItems().isEmpty()) {
             editorContainer.getChildren().add(new Label("No font configs defined. Add one above."));
@@ -1968,10 +2021,10 @@ public class CardMakerController {
 
         editorSection.getChildren().addAll(new Separator(), editorLabel, editorScroll);
         content.getChildren().addAll(fontSection, editorSection);
-        dialog.getDialogPane().setContent(content);
-        dialog.showAndWait();
-        renderTemplate();
-        updatePropertiesPane(getSelectedElement());
+
+        Scene scene = new Scene(content);
+        fontLibraryStage.setScene(scene);
+        fontLibraryStage.show();
     }
 
     private void addElement(CardElement newEl) {
