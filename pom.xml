@@ -6,7 +6,7 @@
 
     <groupId>io.github.coretension</groupId>
     <artifactId>cardmaker</artifactId>
-    <version>0.1.1</version>
+    <version>0.1.2-SNAPSHOT</version>
     <name>cardmaker</name>
 
     <properties>
