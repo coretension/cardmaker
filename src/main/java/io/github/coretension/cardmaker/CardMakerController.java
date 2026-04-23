@@ -804,6 +804,8 @@ public class CardMakerController {
                     makeDraggable(node, el);
                     if (el instanceof ContainerElement ce) {
                         makeResizable((Pane) node, ce);
+                    } else if (el instanceof ImageElement ie) {
+                        makeResizable((Pane) node, ie);
                     }
                 }
             }
@@ -879,7 +881,7 @@ public class CardMakerController {
         return text;
     }
 
-    private ImageView createImageNode(ImageElement ie, Map<String, String> currentRecord) {
+    private Node createImageNode(ImageElement ie, Map<String, String> currentRecord) {
         ImageView imageView = new ImageView();
         imageView.getStyleClass().add("image-element");
 
@@ -898,10 +900,34 @@ public class CardMakerController {
         imageView.fitHeightProperty().bind(ie.heightProperty());
         imageView.preserveRatioProperty().bind(ie.lockAspectRatioProperty());
 
+        Pane pane = new Pane(imageView);
+        pane.getStyleClass().add("image-container");
+        pane.minWidthProperty().bind(ie.widthProperty());
+        pane.maxWidthProperty().bind(ie.widthProperty());
+        pane.minHeightProperty().bind(ie.heightProperty());
+        pane.maxHeightProperty().bind(ie.heightProperty());
+
+        javafx.beans.value.ChangeListener<Object> outlineListener = (obs, old, newVal) -> {
+            try {
+                Color c = Color.web(ie.getOutlineColor());
+                String colorStr = String.format("rgba(%d, %d, %d, %.2f)",
+                        (int) (c.getRed() * 255),
+                        (int) (c.getGreen() * 255),
+                        (int) (c.getBlue() * 255),
+                        c.getOpacity());
+                pane.setStyle("-fx-border-color: " + colorStr + "; -fx-border-width: " + ie.getOutlineWidth() + ";");
+            } catch (Exception e) {
+                pane.setStyle("-fx-border-width: 0;");
+            }
+        };
+        ie.outlineColorProperty().addListener(outlineListener);
+        ie.outlineWidthProperty().addListener(outlineListener);
+        outlineListener.changed(null, null, null);
+
         if (ie.isAllowOverflow()) {
-            imageView.setManaged(false);
+            pane.setManaged(false);
         }
-        return imageView;
+        return pane;
     }
 
     private Pane createContainerNode(ContainerElement ce, ContainerElement.Alignment parentAlignment, boolean forFinalDesign) {
@@ -1047,7 +1073,23 @@ public class CardMakerController {
                 .ifPresent(Node::toFront);
     }
 
-    private void makeResizable(Pane pane, ContainerElement ce) {
+    private void makeResizable(Pane pane, CardElement el) {
+        javafx.beans.property.DoubleProperty widthProperty;
+        javafx.beans.property.DoubleProperty heightProperty;
+        javafx.beans.property.BooleanProperty lockAspectRatioProperty;
+        
+        if (el instanceof ContainerElement ce) {
+            widthProperty = ce.widthProperty();
+            heightProperty = ce.heightProperty();
+            lockAspectRatioProperty = ce.lockAspectRatioProperty();
+        } else if (el instanceof ImageElement ie) {
+            widthProperty = ie.widthProperty();
+            heightProperty = ie.heightProperty();
+            lockAspectRatioProperty = ie.lockAspectRatioProperty();
+        } else {
+            return;
+        }
+
         javafx.scene.shape.Rectangle handle = new javafx.scene.shape.Rectangle(10, 10, Color.BLUE);
         handle.getStyleClass().add("resize-handle");
         handle.setVisible(false); // Only show when selected
@@ -1055,8 +1097,8 @@ public class CardMakerController {
         handle.setManaged(false); // Do not let layout managers (VBox, HBox, etc.) position this
 
         // Position the handle at the bottom right
-        handle.layoutXProperty().bind(ce.widthProperty().subtract(10));
-        handle.layoutYProperty().bind(ce.heightProperty().subtract(10));
+        handle.layoutXProperty().bind(widthProperty.subtract(10));
+        handle.layoutYProperty().bind(heightProperty.subtract(10));
         handle.toFront();
 
         final Delta dragDelta = new Delta();
@@ -1076,8 +1118,8 @@ public class CardMakerController {
                 deltaY /= handle.getParent().getLocalToSceneTransform().getMyy();
             }
             
-            double newWidth = ce.getWidth() + deltaX;
-            double newHeight = ce.getHeight() + deltaY;
+            double newWidth = widthProperty.get() + deltaX;
+            double newHeight = heightProperty.get() + deltaY;
 
             // Constrain new dimensions
             newWidth = Math.max(10, newWidth);
@@ -1087,40 +1129,34 @@ public class CardMakerController {
             double cardWidth = currentTemplate.getDimension().getWidthPx();
             double cardHeight = currentTemplate.getDimension().getHeightPx();
             
-            // For now, we only constrain root-level elements or elements with absolute positions.
-            // If they are in a container, their (x,y) is relative to the container.
-            // To be truly safe, we'd need to calculate their absolute position on the card.
-            // But let's start with a simple constraint: x + width <= cardWidth, y + height <= cardHeight
-            // assuming x and y are relative to the card.
-            
-            if (ce.getX() + newWidth > cardWidth) {
-                newWidth = cardWidth - ce.getX();
+            if (el.getX() + newWidth > cardWidth) {
+                newWidth = cardWidth - el.getX();
             }
-            if (ce.getY() + newHeight > cardHeight) {
-                newHeight = cardHeight - ce.getY();
+            if (el.getY() + newHeight > cardHeight) {
+                newHeight = cardHeight - el.getY();
             }
 
-            if (ce.isLockAspectRatio()) {
-                double ratio = ce.getWidth() / ce.getHeight();
+            if (lockAspectRatioProperty.get()) {
+                double ratio = widthProperty.get() / heightProperty.get();
                 if (Math.abs(deltaX) > Math.abs(deltaY)) {
                     newHeight = newWidth / ratio;
                     // Re-check bounds after aspect ratio adjustment
-                    if (ce.getY() + newHeight > cardHeight) {
-                        newHeight = cardHeight - ce.getY();
+                    if (el.getY() + newHeight > cardHeight) {
+                        newHeight = cardHeight - el.getY();
                         newWidth = newHeight * ratio;
                     }
                 } else {
                     newWidth = newHeight * ratio;
                     // Re-check bounds after aspect ratio adjustment
-                    if (ce.getX() + newWidth > cardWidth) {
-                        newWidth = cardWidth - ce.getX();
+                    if (el.getX() + newWidth > cardWidth) {
+                        newWidth = cardWidth - el.getX();
                         newHeight = newWidth / ratio;
                     }
                 }
             }
 
-            ce.setWidth(newWidth);
-            ce.setHeight(newHeight);
+            widthProperty.set(newWidth);
+            heightProperty.set(newHeight);
 
             dragDelta.x = mouseEvent.getSceneX();
             dragDelta.y = mouseEvent.getSceneY();
@@ -1344,7 +1380,7 @@ public class CardMakerController {
             TextField pathField = new TextField(ie.getImagePath());
             pathField.textProperty().bindBidirectional(ie.imagePathProperty());
             addManagedListener(ie.imagePathProperty(), (obs, old, newVal) -> {
-                if (newVal != null && !newVal.isEmpty()) {
+                if (newVal != null && !newVal.isEmpty() && !newVal.contains("{{")) {
                     try {
                         File file = new File(newVal);
                         if (file.exists()) {
@@ -1381,7 +1417,6 @@ public class CardMakerController {
                 }
             });
 
-            addSectionLabel("Dimensions");
             HBox widthBox = createSliderWithNumericField(ie.widthProperty(), 10, 500);
             widthBox.disableProperty().bind(ie.imagePathProperty().isEmpty());
             addManagedListener(ie.widthProperty(), (obs, old, newVal) -> {
@@ -1414,11 +1449,26 @@ public class CardMakerController {
                 renderTemplate();
             });
 
+            addSectionLabel("Outline");
+            HBox outlineWidthBox = createSliderWithNumericField(ie.outlineWidthProperty(), 0, 20);
+            addManagedListener(ie.outlineWidthProperty(), (obs, old, newVal) -> renderTemplate());
+            
+            ColorPicker outlineColorPicker = new ColorPicker(Color.web(ie.getOutlineColor()));
+            outlineColorPicker.setStyle("-fx-color-label-visible: true;");
+            outlineColorPicker.setMaxWidth(Double.MAX_VALUE);
+            outlineColorPicker.setOnAction(e -> {
+                ie.setOutlineColor(toHexString(outlineColorPicker.getValue()));
+                renderTemplate();
+            });
+
+            propertiesPane.getChildren().add(new Label("Path (use {{header}} for merge)"));
             propertiesPane.getChildren().addAll(new HBox(5, pathField, browseBtn),
                                             new Label("Width"), widthBox,
                                             new Label("Height"), heightBox,
                                             lockAspectBox,
-                                            allowOverflowBox);
+                                            allowOverflowBox,
+                                            new Label("Outline Width"), outlineWidthBox,
+                                            new Label("Outline Color"), outlineColorPicker);
         } else if (el instanceof ContainerElement ce) {
             addSectionLabel("Dimensions");
             HBox widthBox = createSliderWithNumericField(ce.widthProperty(), 10, 500);

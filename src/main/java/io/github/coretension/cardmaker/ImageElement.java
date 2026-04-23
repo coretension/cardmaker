@@ -17,6 +17,10 @@ public class ImageElement extends CardElement {
     private final BooleanProperty lockAspectRatio = new SimpleBooleanProperty(true);
     /** Whether the image is allowed to overflow its defined container. */
     private final BooleanProperty allowOverflow = new SimpleBooleanProperty(false);
+    /** The width of the image outline. */
+    private final DoubleProperty outlineWidth = new SimpleDoubleProperty(0);
+    /** The color of the image outline in hex format. */
+    private final StringProperty outlineColor = new SimpleStringProperty("#000000");
 
     /**
      * Default constructor. Sets the name to "Image".
@@ -72,4 +76,20 @@ public class ImageElement extends CardElement {
     /** @return the allow overflow property */
     @JsonIgnore
     public BooleanProperty allowOverflowProperty() { return allowOverflow; }
+
+    /** @return the outline width */
+    public double getOutlineWidth() { return outlineWidth.get(); }
+    /** @param value the outline width to set */
+    public void setOutlineWidth(double value) { outlineWidth.set(value); }
+    /** @return the outline width property */
+    @JsonIgnore
+    public DoubleProperty outlineWidthProperty() { return outlineWidth; }
+
+    /** @return the outline color */
+    public String getOutlineColor() { return outlineColor.get(); }
+    /** @param value the outline color to set */
+    public void setOutlineColor(String value) { outlineColor.set(value); }
+    /** @return the outline color property */
+    @JsonIgnore
+    public StringProperty outlineColorProperty() { return outlineColor; }
 }
