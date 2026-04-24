@@ -72,6 +72,7 @@ public class CardMakerController {
     private long lastCsvModificationTime = 0;
     private Stage iconLibraryStage;
     private Stage fontLibraryStage;
+    private Stage dataViewerStage;
 
     @FXML
     public void initialize() {
@@ -753,7 +754,8 @@ public class CardMakerController {
                             String iconPath = iconMap.get(key);
                             if (iconPath != null && !iconPath.isEmpty()) {
                                 ImageView iv = new ImageView();
-                                iv.setImage(loadSafeImage(iconPath));
+                                String baseDir = (currentFile != null) ? currentFile.getParent() : null;
+                                iv.setImage(loadSafeImage(iconPath, baseDir));
                                 if (iv.getImage() != null) {
                                     iv.fitWidthProperty().bind(ice.iconWidthProperty());
                                     iv.fitHeightProperty().bind(ice.iconHeightProperty());
@@ -888,7 +890,13 @@ public class CardMakerController {
         javafx.beans.value.ChangeListener<String> pathListener = (obs, old, newVal) -> {
             String p = (currentRecord != null) ? dataMerger.merge(newVal, currentRecord) : newVal;
             if (p != null && !p.isEmpty()) {
-                imageView.setImage(loadSafeImage(p));
+                String baseDir = null;
+                if (newVal != null && newVal.contains("{{") && currentTemplate.getCsvPath() != null) {
+                    baseDir = new File(currentTemplate.getCsvPath()).getParent();
+                } else if (currentFile != null) {
+                    baseDir = currentFile.getParent();
+                }
+                imageView.setImage(loadSafeImage(p, baseDir));
             } else {
                 imageView.setImage(null);
             }
@@ -906,23 +914,6 @@ public class CardMakerController {
         pane.maxWidthProperty().bind(ie.widthProperty());
         pane.minHeightProperty().bind(ie.heightProperty());
         pane.maxHeightProperty().bind(ie.heightProperty());
-
-        javafx.beans.value.ChangeListener<Object> outlineListener = (obs, old, newVal) -> {
-            try {
-                Color c = Color.web(ie.getOutlineColor());
-                String colorStr = String.format("rgba(%d, %d, %d, %.2f)",
-                        (int) (c.getRed() * 255),
-                        (int) (c.getGreen() * 255),
-                        (int) (c.getBlue() * 255),
-                        c.getOpacity());
-                pane.setStyle("-fx-border-color: " + colorStr + "; -fx-border-width: " + ie.getOutlineWidth() + ";");
-            } catch (Exception e) {
-                pane.setStyle("-fx-border-width: 0;");
-            }
-        };
-        ie.outlineColorProperty().addListener(outlineListener);
-        ie.outlineWidthProperty().addListener(outlineListener);
-        outlineListener.changed(null, null, null);
 
         if (ie.isAllowOverflow()) {
             pane.setManaged(false);
@@ -1004,10 +995,13 @@ public class CardMakerController {
         return flowPane;
     }
 
-    private Image loadSafeImage(String path) {
+    private Image loadSafeImage(String path, String baseDir) {
         if (path == null || path.isEmpty()) return null;
         try {
             File file = new File(path);
+            if (!file.isAbsolute() && baseDir != null) {
+                file = new File(baseDir, path);
+            }
             if (!file.exists()) return null;
 
             if (path.toLowerCase().endsWith(".svg")) {
@@ -1413,7 +1407,7 @@ public class CardMakerController {
                 File file = fileChooser.showOpenDialog(propertiesPane.getScene().getWindow());
                 if (file != null) {
                     lastOpenedDirectory = file.getParentFile();
-                    pathField.setText(file.getAbsolutePath());
+                    pathField.setText(relativizePath(file));
                 }
             });
 
@@ -1449,26 +1443,12 @@ public class CardMakerController {
                 renderTemplate();
             });
 
-            addSectionLabel("Outline");
-            HBox outlineWidthBox = createSliderWithNumericField(ie.outlineWidthProperty(), 0, 20);
-            addManagedListener(ie.outlineWidthProperty(), (obs, old, newVal) -> renderTemplate());
-            
-            ColorPicker outlineColorPicker = new ColorPicker(Color.web(ie.getOutlineColor()));
-            outlineColorPicker.setStyle("-fx-color-label-visible: true;");
-            outlineColorPicker.setMaxWidth(Double.MAX_VALUE);
-            outlineColorPicker.setOnAction(e -> {
-                ie.setOutlineColor(toHexString(outlineColorPicker.getValue()));
-                renderTemplate();
-            });
-
             propertiesPane.getChildren().add(new Label("Path (use {{header}} for merge)"));
             propertiesPane.getChildren().addAll(new HBox(5, pathField, browseBtn),
                                             new Label("Width"), widthBox,
                                             new Label("Height"), heightBox,
                                             lockAspectBox,
-                                            allowOverflowBox,
-                                            new Label("Outline Width"), outlineWidthBox,
-                                            new Label("Outline Color"), outlineColorPicker);
+                                            allowOverflowBox);
         } else if (el instanceof ContainerElement ce) {
             addSectionLabel("Dimensions");
             HBox widthBox = createSliderWithNumericField(ce.widthProperty(), 10, 500);
@@ -1638,6 +1618,19 @@ public class CardMakerController {
                 (int)(color.getBlue() * 255));
     }
 
+    private String relativizePath(File file) {
+        if (file == null) return null;
+        String path = file.getAbsolutePath();
+        if (currentFile != null) {
+            try {
+                path = currentFile.getParentFile().toPath().relativize(file.toPath()).toString();
+            } catch (IllegalArgumentException ex) {
+                // Different drives, use absolute path
+            }
+        }
+        return path;
+    }
+
     private void addMappingRow(Map<String, String> iconMap, String charStr, VBox container) {
         HBox row = new HBox(10);
         row.setAlignment(Pos.CENTER_LEFT);
@@ -1669,7 +1662,7 @@ public class CardMakerController {
             File file = fileChooser.showOpenDialog(propertiesPane.getScene().getWindow());
             if (file != null) {
                 lastOpenedDirectory = file.getParentFile();
-                pathField.setText(file.getAbsolutePath());
+                pathField.setText(relativizePath(file));
             }
         });
 
@@ -2387,14 +2380,25 @@ public class CardMakerController {
             return;
         }
 
-        Dialog<ButtonType> dialog = new Dialog<>();
-        dialog.setTitle("CSV Data Viewer");
-        dialog.setHeaderText("Available Columns for Merge: " + 
-            String.join(", ", csvHeaders.stream().map(h -> "{{" + h + "}}").toList()));
-        
+        if (dataViewerStage != null && dataViewerStage.isShowing()) {
+            dataViewerStage.toFront();
+            return;
+        }
+
+        dataViewerStage = new Stage();
+        dataViewerStage.setTitle("CSV Data Viewer");
+
+        VBox root = new VBox(10);
+        root.setPadding(new Insets(10));
+
+        Label headerLabel = new Label("Available Columns for Merge: " +
+                String.join(", ", csvHeaders.stream().map(h -> "{{" + h + "}}").toList()));
+        headerLabel.setWrapText(true);
+
         TableView<Map<String, String>> tableView = new TableView<>();
         tableView.setEditable(true);
-        
+        VBox.setVgrow(tableView, Priority.ALWAYS);
+
         for (String header : csvHeaders) {
             TableColumn<Map<String, String>, String> column = new TableColumn<>(header);
             column.setCellValueFactory(data -> new SimpleStringProperty(data.getValue().get(header)));
@@ -2407,7 +2411,7 @@ public class CardMakerController {
             });
             tableView.getColumns().add(column);
         }
-        
+
         ObservableList<Map<String, String>> data = FXCollections.observableArrayList(csvData);
         tableView.setItems(data);
 
@@ -2424,45 +2428,54 @@ public class CardMakerController {
             }
         });
 
-        ButtonType saveButtonType = new ButtonType("Save to File", ButtonBar.ButtonData.OK_DONE);
-        dialog.getDialogPane().getButtonTypes().addAll(saveButtonType, ButtonType.CLOSE);
-        
-        dialog.getDialogPane().setContent(tableView);
-        dialog.setResizable(true);
-        dialog.getDialogPane().setPrefSize(800, 600);
-        
-        Optional<ButtonType> result = dialog.showAndWait();
-        if (result.isPresent() && result.get() == saveButtonType) {
+        HBox buttonBox = new HBox(10);
+        buttonBox.setAlignment(Pos.CENTER_RIGHT);
+        Button saveButton = new Button("Save to File");
+        Button closeButton = new Button("Close");
+
+        saveButton.setOnAction(e -> {
             csvData = new ArrayList<>(data);
             if (currentTemplate.getCsvPath() != null) {
                 try {
                     dataMerger.saveData(currentTemplate.getCsvPath(), csvHeaders, csvData);
                     Alert alert = new Alert(Alert.AlertType.INFORMATION, "Data saved to " + currentTemplate.getCsvPath());
+                    alert.initOwner(dataViewerStage);
                     alert.show();
-                } catch (IOException e) {
-                    Alert alert = new Alert(Alert.AlertType.ERROR, "Failed to save data: " + e.getMessage());
+                } catch (IOException ex) {
+                    Alert alert = new Alert(Alert.AlertType.ERROR, "Failed to save data: " + ex.getMessage());
+                    alert.initOwner(dataViewerStage);
                     alert.show();
                 }
             } else {
-                // Should not happen if data is loaded, but as a fallback:
                 FileChooser fileChooser = new FileChooser();
                 fileChooser.setTitle("Save Data As");
                 fileChooser.getExtensionFilters().addAll(
                         new FileChooser.ExtensionFilter("CSV Files", "*.csv"),
                         new FileChooser.ExtensionFilter("ODS Files", "*.ods")
                 );
-                File file = fileChooser.showSaveDialog(propertiesPane.getScene().getWindow());
+                File file = fileChooser.showSaveDialog(dataViewerStage);
                 if (file != null) {
                     try {
                         dataMerger.saveData(file.getAbsolutePath(), csvHeaders, csvData);
                         currentTemplate.setCsvPath(file.getAbsolutePath());
-                    } catch (IOException e) {
-                        Alert alert = new Alert(Alert.AlertType.ERROR, "Failed to save data: " + e.getMessage());
+                    } catch (IOException ex) {
+                        Alert alert = new Alert(Alert.AlertType.ERROR, "Failed to save data: " + ex.getMessage());
+                        alert.initOwner(dataViewerStage);
                         alert.show();
                     }
                 }
             }
-        }
+        });
+
+        closeButton.setOnAction(e -> dataViewerStage.close());
+
+        buttonBox.getChildren().addAll(saveButton, closeButton);
+
+        root.getChildren().addAll(headerLabel, tableView, buttonBox);
+
+        Scene scene = new Scene(root, 800, 600);
+        dataViewerStage.setScene(scene);
+        dataViewerStage.show();
     }
 
     @FXML
