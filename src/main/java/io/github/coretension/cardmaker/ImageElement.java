@@ -30,7 +30,7 @@ public class ImageElement extends CardElement {
      * @param name the name of the image element
      */
     public ImageElement(String name) {
-        setName(name);
+        super(name);
     }
 
     /** @return the image path string */

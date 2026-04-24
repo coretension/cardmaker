@@ -21,7 +21,7 @@ public abstract class ParentCardElement extends CardElement {
      * @param name the name of the parent element
      */
     public ParentCardElement(String name) {
-        setName(name);
+        super(name);
     }
 
     /**

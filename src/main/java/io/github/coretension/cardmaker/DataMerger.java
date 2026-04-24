@@ -372,15 +372,20 @@ public class DataMerger {
      */
     public String merge(String template, Map<String, String> record) {
         if (template == null) return null;
-        if (record == null) return template;
-        
-        String result = template;
-        for (Map.Entry<String, String> entry : record.entrySet()) {
-            String key = entry.getKey();
-            String value = entry.getValue() != null ? entry.getValue() : "";
-            result = result.replace("{{" + key + "}}", value);
+        if (record == null || !template.contains("{{")) return template;
+
+        StringBuilder sb = new StringBuilder();
+        int lastPos = 0;
+        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("\\{\\{(.+?)\\}\\}");
+        java.util.regex.Matcher matcher = pattern.matcher(template);
+        while (matcher.find()) {
+            sb.append(template, lastPos, matcher.start());
+            String key = matcher.group(1);
+            sb.append(record.getOrDefault(key, matcher.group(0)));
+            lastPos = matcher.end();
         }
-        return result;
+        sb.append(template.substring(lastPos));
+        return sb.toString();
     }
 
     /**

@@ -35,6 +35,19 @@ public abstract class CardElement {
     protected final BooleanProperty enabled = new SimpleBooleanProperty(true);
 
     /**
+     * Default constructor.
+     */
+    public CardElement() {}
+
+    /**
+     * Constructor with a name for the element.
+     * @param name the name of the element
+     */
+    public CardElement(String name) {
+        setName(name);
+    }
+
+    /**
      * @return the x coordinate value
      */
     public double getX() { return x.get(); }

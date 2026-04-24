@@ -57,7 +57,7 @@ public class PdfExportService {
                 document.newPage();
                 
                 // Render card to image at high DPI (300)
-                BufferedImage cardImage = renderCardToImage(record, 300);
+                BufferedImage cardImage = controller.renderCardToImage(record, 300, false);
                 
                 com.lowagie.text.Image pdfImg = convertToCmykImage(cardImage);
                 pdfImg.scaleToFit(totalWidthPt, totalHeightPt);
@@ -73,47 +73,6 @@ public class PdfExportService {
         }
     }
 
-    /**
-     * Renders a single card to a BufferedImage at the specified DPI.
-     *
-     * @param record the data record for the card
-     * @param dpi the resolution for rendering
-     * @return the rendered image
-     */
-    private BufferedImage renderCardToImage(Map<String, String> record, double dpi) {
-        boolean proMode = controller.isProfessionalMode();
-        double bleedMm = proMode ? template.getBleedMm() : 0;
-        double widthPx = (template.getDimension().getWidthMm() + 2 * bleedMm) * dpi / 25.4;
-        double heightPx = (template.getDimension().getHeightMm() + 2 * bleedMm) * dpi / 25.4;
-
-        Pane root = new Pane();
-        root.setPrefSize(widthPx, heightPx);
-        root.setMinSize(widthPx, heightPx);
-        root.setMaxSize(widthPx, heightPx);
-        root.setStyle("-fx-background-color: white;");
-
-        double scale = dpi / CardDimension.getDpi();
-        Pane contentPane = new Pane();
-        double bleedPx = bleedMm * dpi / 25.4;
-        contentPane.setLayoutX(bleedPx);
-        contentPane.setLayoutY(bleedPx);
-        contentPane.setScaleX(scale);
-        contentPane.setScaleY(scale);
-        // Pivot from top-left
-        contentPane.setTranslateX((scale - 1) * template.getDimension().getWidthPx() / 2);
-        contentPane.setTranslateY((scale - 1) * template.getDimension().getHeightPx() / 2);
-        
-        root.getChildren().add(contentPane);
-
-        controller.renderElementsExternal(template.getElements(), contentPane, record, true);
-
-        // Snapshot requires a scene to apply styles/layouts correctly in some cases
-        new Scene(root); 
-
-        // Snapshot
-        javafx.scene.image.WritableImage snapshot = root.snapshot(null, null);
-        return SwingFXUtils.fromFXImage(snapshot, null);
-    }
 
     /**
      * Converts an RGB BufferedImage to a CMYK com.lowagie.text.Image.

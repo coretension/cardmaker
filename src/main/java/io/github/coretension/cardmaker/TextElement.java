@@ -38,7 +38,7 @@ public class TextElement extends CardElement {
      * @param name the name of the text element
      */
     public TextElement(String name) {
-        setName(name);
+        super(name);
     }
 
     /** @return the text content */

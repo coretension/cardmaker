@@ -32,7 +32,7 @@ public class IconElement extends CardElement {
      * @param name the name of the icon element
      */
     public IconElement(String name) {
-        setName(name);
+        super(name);
     }
 
     /** @return the icon value string */

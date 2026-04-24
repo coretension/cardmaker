@@ -68,11 +68,7 @@ public class DeckStorage {
      * Returns the file where settings are stored, ensuring parent directories exist.
      */
     public static File getSettingsFile() {
-        String userHome = System.getProperty("user.home");
-        Path path = Paths.get(userHome, ".cardmaker", "settings.json");
-        File file = path.toFile();
-        ensureParentExists(file);
-        return file;
+        return getConfigFile("settings.json");
     }
 
     /**
@@ -87,8 +83,12 @@ public class DeckStorage {
      * Returns the file where the temporary deck is stored, ensuring parent directories exist.
      */
     public static File getTempFile() {
+        return getConfigFile("temp_deck.json");
+    }
+
+    private static File getConfigFile(String filename) {
         String userHome = System.getProperty("user.home");
-        Path path = Paths.get(userHome, ".cardmaker", "temp_deck.json");
+        Path path = Paths.get(userHome, ".cardmaker", filename);
         File file = path.toFile();
         ensureParentExists(file);
         return file;
@@ -148,25 +148,28 @@ public class DeckStorage {
             JsonNode node = p.getCodec().readTree(p);
             if (node.isTextual()) {
                 String textValue = node.asText();
-                try {
-                    return new SimpleObjectProperty<>(ContainerElement.LayoutType.valueOf(textValue));
-                } catch (IllegalArgumentException e0) {
-                    try {
-                        return new SimpleObjectProperty<>(ContainerElement.Alignment.valueOf(textValue));
-                    } catch (IllegalArgumentException e1a) {
-                        try {
-                            return new SimpleObjectProperty<>(javafx.scene.text.FontWeight.valueOf(textValue));
-                        } catch (IllegalArgumentException e1) {
-                            try {
-                                return new SimpleObjectProperty<>(javafx.scene.text.FontPosture.valueOf(textValue));
-                            } catch (IllegalArgumentException e2) {
-                                return new SimpleObjectProperty<>(textValue);
-                            }
-                        }
-                    }
-                }
+                Object val = tryParseEnum(textValue);
+                return new SimpleObjectProperty<>(val != null ? val : textValue);
             }
             return new SimpleObjectProperty<>(node);
+        }
+
+        private Object tryParseEnum(String value) {
+            Class<?>[] enumClasses = {
+                    ContainerElement.LayoutType.class,
+                    ContainerElement.Alignment.class,
+                    javafx.scene.text.FontWeight.class,
+                    javafx.scene.text.FontPosture.class
+            };
+            for (Class<?> enumClass : enumClasses) {
+                try {
+                    @SuppressWarnings("unchecked")
+                    Enum<?> e = Enum.valueOf((Class<Enum>) enumClass, value);
+                    return e;
+                } catch (IllegalArgumentException ignored) {
+                }
+            }
+            return null;
         }
     }
 

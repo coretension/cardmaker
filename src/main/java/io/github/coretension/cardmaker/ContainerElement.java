@@ -44,7 +44,7 @@ public class ContainerElement extends ParentCardElement {
      * @param name the name of the container
      */
     public ContainerElement(String name) {
-        setName(name);
+        super(name);
     }
 
     /** @return the width of the container */

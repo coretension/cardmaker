@@ -38,7 +38,7 @@ public class FontElement extends CardElement {
      * @param name the name of the font element
      */
     public FontElement(String name) {
-        setName(name);
+        super(name);
     }
 
     /** @return the font family name */

@@ -63,7 +63,7 @@ public class TtsExportService {
         for (Map<String, String> record : records) {
             if (count >= cardsPerRow * cardsPerColumn) break; // Limit to one sheet for now
 
-            BufferedImage cardImage = renderCardToImage(record, dpi);
+            BufferedImage cardImage = controller.renderCardToImage(record, dpi, true);
             int row = count / cardsPerRow;
             int col = count % cardsPerRow;
             int x = col * cardWidthPx;
@@ -82,52 +82,4 @@ public class TtsExportService {
         ImageIO.write(sheet, format, file);
     }
 
-    private BufferedImage renderCardToImage(Map<String, String> record, double dpi) {
-        boolean proMode = controller.isProfessionalMode();
-        double bleedMm = proMode ? template.getBleedMm() : 0;
-        double widthPx = (template.getDimension().getWidthMm() + 2 * bleedMm) * dpi / 25.4;
-        double heightPx = (template.getDimension().getHeightMm() + 2 * bleedMm) * dpi / 25.4;
-
-        Pane root = new Pane();
-        root.setPrefSize(widthPx, heightPx);
-        root.setMinSize(widthPx, heightPx);
-        root.setMaxSize(widthPx, heightPx);
-        root.setStyle("-fx-background-color: white;");
-
-        // Apply clipping to the root to simulate preview mode (everything clipped to card + bleed)
-        javafx.scene.shape.Rectangle clip = new javafx.scene.shape.Rectangle(widthPx, heightPx);
-        root.setClip(clip);
-
-        double scale = dpi / CardDimension.getDpi();
-        Pane contentPane = new Pane();
-        double bleedPx = bleedMm * dpi / 25.4;
-        contentPane.setLayoutX(bleedPx);
-        contentPane.setLayoutY(bleedPx);
-        contentPane.setScaleX(scale);
-        contentPane.setScaleY(scale);
-        // Pivot from top-left
-        contentPane.setTranslateX((scale - 1) * template.getDimension().getWidthPx() / 2);
-        contentPane.setTranslateY((scale - 1) * template.getDimension().getHeightPx() / 2);
-        
-        root.getChildren().add(contentPane);
-
-        controller.renderElementsExternal(template.getElements(), contentPane, record, true);
-
-        // Add bleed guide (outline) if professional mode is on
-        if (proMode) {
-            double cardWidthPx = template.getDimension().getWidthMm() * dpi / 25.4;
-            double cardHeightPx = template.getDimension().getHeightMm() * dpi / 25.4;
-            javafx.scene.shape.Rectangle bleedGuide = new javafx.scene.shape.Rectangle(bleedPx, bleedPx, cardWidthPx, cardHeightPx);
-            bleedGuide.setFill(javafx.scene.paint.Color.TRANSPARENT);
-            bleedGuide.setStroke(javafx.scene.paint.Color.RED);
-            bleedGuide.setStrokeWidth(1);
-            bleedGuide.getStrokeDashArray().addAll(5.0, 5.0);
-            root.getChildren().add(bleedGuide);
-        }
-
-        new Scene(root); 
-
-        javafx.scene.image.WritableImage snapshot = root.snapshot(null, null);
-        return SwingFXUtils.fromFXImage(snapshot, null);
-    }
 }

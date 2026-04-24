@@ -685,6 +685,62 @@ public class CardMakerController {
         renderElements(elements, targetPane, currentRecord, null, ContainerElement.LayoutType.POSITIONAL, ContainerElement.Alignment.LEFT, forFinalDesign, false);
     }
 
+    /**
+     * Renders a single card to a BufferedImage at the specified DPI.
+     *
+     * @param record          the data record for the card
+     * @param dpi             the resolution for rendering
+     * @param showBleedGuide  whether to show the bleed guide (red dashed outline)
+     * @return the rendered image
+     */
+    public BufferedImage renderCardToImage(Map<String, String> record, double dpi, boolean showBleedGuide) {
+        boolean proMode = isProfessionalMode();
+        double bleedMm = proMode ? currentTemplate.getBleedMm() : 0;
+        double widthPx = (currentTemplate.getDimension().getWidthMm() + 2 * bleedMm) * dpi / 25.4;
+        double heightPx = (currentTemplate.getDimension().getHeightMm() + 2 * bleedMm) * dpi / 25.4;
+
+        Pane root = new Pane();
+        root.setPrefSize(widthPx, heightPx);
+        root.setMinSize(widthPx, heightPx);
+        root.setMaxSize(widthPx, heightPx);
+        root.setStyle("-fx-background-color: white;");
+
+        // Apply clipping to the root
+        javafx.scene.shape.Rectangle clip = new javafx.scene.shape.Rectangle(widthPx, heightPx);
+        root.setClip(clip);
+
+        double scale = dpi / CardDimension.getDpi();
+        Pane contentPane = new Pane();
+        double bleedPx = bleedMm * dpi / 25.4;
+        contentPane.setLayoutX(bleedPx);
+        contentPane.setLayoutY(bleedPx);
+        contentPane.setScaleX(scale);
+        contentPane.setScaleY(scale);
+        // Pivot from top-left
+        contentPane.setTranslateX((scale - 1) * currentTemplate.getDimension().getWidthPx() / 2);
+        contentPane.setTranslateY((scale - 1) * currentTemplate.getDimension().getHeightPx() / 2);
+
+        root.getChildren().add(contentPane);
+
+        renderElementsExternal(currentTemplate.getElements(), contentPane, record, true);
+
+        // Add bleed guide (outline) if requested
+        if (showBleedGuide && proMode) {
+            double cardWidthPx = currentTemplate.getDimension().getWidthMm() * dpi / 25.4;
+            double cardHeightPx = currentTemplate.getDimension().getHeightMm() * dpi / 25.4;
+            javafx.scene.shape.Rectangle bleedGuide = new javafx.scene.shape.Rectangle(bleedPx, bleedPx, cardWidthPx, cardHeightPx);
+            bleedGuide.setFill(Color.TRANSPARENT);
+            bleedGuide.setStroke(Color.RED);
+            bleedGuide.setStrokeWidth(1);
+            bleedGuide.getStrokeDashArray().addAll(5.0, 5.0);
+            root.getChildren().add(bleedGuide);
+        }
+
+        new Scene(root);
+        javafx.scene.image.WritableImage snapshot = root.snapshot(null, null);
+        return SwingFXUtils.fromFXImage(snapshot, null);
+    }
+
     private void renderElements(ObservableList<CardElement> elements, Pane targetPane, Map<String, String> currentRecord, FontElement inheritedFont, ContainerElement.LayoutType containerLayout, ContainerElement.Alignment containerAlignment, boolean forFinalDesign, boolean isLocked) {
         FontElement currentFont = inheritedFont;
         for (CardElement el : elements) {
@@ -904,16 +960,34 @@ public class CardMakerController {
         ie.imagePathProperty().addListener(pathListener);
         pathListener.changed(null, null, ie.getImagePath());
 
-        imageView.fitWidthProperty().bind(ie.widthProperty());
-        imageView.fitHeightProperty().bind(ie.heightProperty());
+        // Use a StackPane and bind its size to the actual scaled image dimensions
+        // This ensures the bounding box (and dragging area) matches the visible image
         imageView.preserveRatioProperty().bind(ie.lockAspectRatioProperty());
+
+        imageView.fitWidthProperty().bind(javafx.beans.binding.Bindings.createDoubleBinding(() -> {
+            Image img = imageView.getImage();
+            if (img == null || !ie.isLockAspectRatio() || img.getWidth() == 0 || img.getHeight() == 0) return ie.getWidth();
+            double imgAR = img.getWidth() / img.getHeight();
+            double boxAR = ie.getWidth() / ie.getHeight();
+            return (imgAR > boxAR) ? ie.getWidth() : ie.getHeight() * imgAR;
+        }, ie.widthProperty(), ie.heightProperty(), ie.lockAspectRatioProperty(), imageView.imageProperty()));
+
+        imageView.fitHeightProperty().bind(javafx.beans.binding.Bindings.createDoubleBinding(() -> {
+            Image img = imageView.getImage();
+            if (img == null || !ie.isLockAspectRatio() || img.getWidth() == 0 || img.getHeight() == 0) return ie.getHeight();
+            double imgAR = img.getWidth() / img.getHeight();
+            double boxAR = ie.getWidth() / ie.getHeight();
+            return (imgAR > boxAR) ? ie.getWidth() / imgAR : ie.getHeight();
+        }, ie.widthProperty(), ie.heightProperty(), ie.lockAspectRatioProperty(), imageView.imageProperty()));
 
         Pane pane = new Pane(imageView);
         pane.getStyleClass().add("image-container");
-        pane.minWidthProperty().bind(ie.widthProperty());
-        pane.maxWidthProperty().bind(ie.widthProperty());
-        pane.minHeightProperty().bind(ie.heightProperty());
-        pane.maxHeightProperty().bind(ie.heightProperty());
+        pane.minWidthProperty().bind(imageView.fitWidthProperty());
+        pane.maxWidthProperty().bind(imageView.fitWidthProperty());
+        pane.minHeightProperty().bind(imageView.fitHeightProperty());
+        pane.maxHeightProperty().bind(imageView.fitHeightProperty());
+        pane.prefWidthProperty().bind(imageView.fitWidthProperty());
+        pane.prefHeightProperty().bind(imageView.fitHeightProperty());
 
         if (ie.isAllowOverflow()) {
             pane.setManaged(false);
@@ -1090,9 +1164,14 @@ public class CardMakerController {
         handle.setCursor(javafx.scene.Cursor.SE_RESIZE);
         handle.setManaged(false); // Do not let layout managers (VBox, HBox, etc.) position this
 
-        // Position the handle at the bottom right
-        handle.layoutXProperty().bind(widthProperty.subtract(10));
-        handle.layoutYProperty().bind(heightProperty.subtract(10));
+        // Position the handle at the bottom right of the pane
+        handle.layoutXProperty().bind(pane.widthProperty().subtract(10));
+        handle.layoutYProperty().bind(pane.heightProperty().subtract(10));
+        
+        if (pane instanceof StackPane) {
+            StackPane.setAlignment(handle, Pos.TOP_LEFT);
+        }
+        
         handle.toFront();
 
         final Delta dragDelta = new Delta();
@@ -1185,19 +1264,18 @@ public class CardMakerController {
             double cardWidth = currentTemplate.getDimension().getWidthPx();
             double cardHeight = currentTemplate.getDimension().getHeightPx();
             
-            double width = 0;
-            double height = 0;
-            if (el instanceof ContainerElement ce) {
-                width = ce.getWidth();
-                height = ce.getHeight();
-            } else if (el instanceof ImageElement ie) {
-                width = ie.getWidth();
-                height = ie.getHeight();
-            } else if (el instanceof TextElement te) {
-                // For text elements, use height based on font size (approximate)
-                height = te.getFontSize();
-                // Width is tricky for text, we'll assume 20 as a minimal safety margin
-                width = 20; 
+            double width = node.getLayoutBounds().getWidth();
+            double height = node.getLayoutBounds().getHeight();
+            
+            if (node instanceof Text text) {
+                // For Text nodes, layoutBounds includes wrappingWidth which might be bound to the card width.
+                // To get the actual visual width of the text content without the wrapping constraint,
+                // we use a temporary Text node with the same properties.
+                Text temp = new Text(text.getText());
+                temp.setFont(text.getFont());
+                temp.setStrokeWidth(text.getStrokeWidth());
+                width = temp.getLayoutBounds().getWidth();
+                height = temp.getLayoutBounds().getHeight();
             }
             
             // Constrain X
@@ -1246,62 +1324,15 @@ public class CardMakerController {
         activeListeners.clear();
     }
 
-    private HBox createSliderWithNumericField(javafx.beans.property.DoubleProperty property, double min, double max) {
-        Slider slider = new Slider(min, max, property.get());
-        slider.setMinWidth(150);
-        slider.setMaxWidth(Double.MAX_VALUE);
-        HBox.setHgrow(slider, Priority.ALWAYS);
-        slider.valueProperty().bindBidirectional(property);
-
-        TextField textField = new TextField();
-        textField.setPrefWidth(50);
-        
-        // Formatting function for numeric field
-        Runnable updateText = () -> {
-            if (max <= 1.0) {
-                textField.setText(String.format("%.2f", property.get()));
-            } else {
-                textField.setText(String.format("%.0f", property.get()));
-            }
-        };
-
-        updateText.run();
-        
-        property.addListener((obs, old, newVal) -> {
-            if (!textField.isFocused()) {
-                updateText.run();
-            }
-        });
-
-        textField.setOnAction(e -> {
-            try {
-                double val = Double.parseDouble(textField.getText());
-                property.set(Math.max(min, Math.min(max, val)));
-                updateText.run();
-            } catch (NumberFormatException ex) {
-                updateText.run();
-            }
-        });
-
-        textField.focusedProperty().addListener((obs, old, newVal) -> {
-            if (!newVal) { // Lost focus
-                try {
-                    double val = Double.parseDouble(textField.getText());
-                    property.set(Math.max(min, Math.min(max, val)));
-                    updateText.run();
-                } catch (NumberFormatException ex) {
-                    updateText.run();
-                }
-            }
-        });
-
-        return new HBox(10, slider, textField);
-    }
-
     private void addSectionLabel(String text) {
         Label label = new Label(text);
         label.setStyle("-fx-font-weight: bold; -fx-padding: 5 0 2 0; -fx-text-fill: #555;");
         propertiesPane.getChildren().add(label);
+    }
+
+    private void addProperty(String label, Node control) {
+        propertiesPane.getChildren().add(new Label(label));
+        propertiesPane.getChildren().add(control);
     }
 
     private void updatePropertiesPane(CardElement el) {
@@ -1312,16 +1343,14 @@ public class CardMakerController {
         addSectionLabel("Element Settings");
         TextField nameField = new TextField(el.getName());
         nameField.textProperty().bindBidirectional(el.nameProperty());
-        propertiesPane.getChildren().add(new Label("Name"));
-        propertiesPane.getChildren().add(nameField);
+        addProperty("Name", nameField);
 
         if (el instanceof ConditionElement ce) {
             addSectionLabel("Condition");
             TextField conditionField = new TextField(ce.getCondition());
             conditionField.textProperty().bindBidirectional(ce.conditionProperty());
             addManagedListener(ce.conditionProperty(), (obs, old, newVal) -> renderTemplate());
-            propertiesPane.getChildren().add(new Label("CSV Column or Expression"));
-            propertiesPane.getChildren().add(conditionField);
+            addProperty("CSV Column or Expression", conditionField);
         }
 
         if (el instanceof TextElement te) {
@@ -1330,8 +1359,7 @@ public class CardMakerController {
             textArea.setPrefRowCount(3);
             textArea.textProperty().bindBidirectional(te.textProperty());
             addManagedListener(te.textProperty(), (obs, old, newVal) -> renderTemplate());
-            propertiesPane.getChildren().add(new Label("Content (use {{header}} for merge)"));
-            propertiesPane.getChildren().add(textArea);
+            addProperty("Content (use {{header}} for merge)", textArea);
 
             addSectionLabel("Appearance");
             ComboBox<String> fontConfigCombo = new ComboBox<>();
@@ -1340,34 +1368,30 @@ public class CardMakerController {
             fontConfigCombo.setValue(te.getFontConfigName());
             te.fontConfigNameProperty().bind(fontConfigCombo.valueProperty());
             addManagedListener(te.fontConfigNameProperty(), (obs, old, newVal) -> renderTemplate());
-            propertiesPane.getChildren().add(new Label("Font Configuration"));
-            propertiesPane.getChildren().add(fontConfigCombo);
+            addProperty("Font Configuration", fontConfigCombo);
 
             javafx.beans.binding.BooleanBinding isNotDefault = te.fontConfigNameProperty().isNotEqualTo("Default");
 
-            HBox sizeBox = createSliderWithNumericField(te.fontSizeProperty(), 8, 72);
+            HBox sizeBox = UIUtils.createSliderWithNumericField(te.fontSizeProperty(), 8, 72);
             sizeBox.disableProperty().bind(isNotDefault);
             addManagedListener(te.fontSizeProperty(), (obs, old, newVal) -> renderTemplate());
-            propertiesPane.getChildren().add(new Label("Size"));
-            propertiesPane.getChildren().add(sizeBox);
+            addProperty("Size", sizeBox);
 
             ColorPicker colorPicker = new ColorPicker(Color.web(te.getColor()));
             colorPicker.setStyle("-fx-color-label-visible: true;");
             colorPicker.setMaxWidth(Double.MAX_VALUE);
             colorPicker.disableProperty().bind(isNotDefault);
             colorPicker.setOnAction(e -> {
-                te.setColor(toHexString(colorPicker.getValue()));
+                te.setColor(UIUtils.toHexString(colorPicker.getValue()));
                 renderTemplate();
             });
-            propertiesPane.getChildren().add(new Label("Color"));
-            propertiesPane.getChildren().add(colorPicker);
+            addProperty("Color", colorPicker);
 
             addSectionLabel("Layout");
-            HBox angleBox = createSliderWithNumericField(te.angleProperty(), -360, 360);
+            HBox angleBox = UIUtils.createSliderWithNumericField(te.angleProperty(), -360, 360);
             angleBox.disableProperty().bind(isNotDefault);
             addManagedListener(te.angleProperty(), (obs, old, newVal) -> renderTemplate());
-            propertiesPane.getChildren().add(new Label("Angle"));
-            propertiesPane.getChildren().add(angleBox);
+            addProperty("Angle", angleBox);
 
         } else if (el instanceof ImageElement ie) {
             addSectionLabel("Source");
@@ -1378,7 +1402,7 @@ public class CardMakerController {
                     try {
                         File file = new File(newVal);
                         if (file.exists()) {
-                            Image img = new Image(file.toURI().toString());
+                            javafx.scene.image.Image img = new javafx.scene.image.Image(file.toURI().toString());
                             if (img.getWidth() > 0 && img.getHeight() > 0) {
                                 double ratio = img.getHeight() / img.getWidth();
                                 isUpdatingOtherAxis = true;
@@ -1407,11 +1431,11 @@ public class CardMakerController {
                 File file = fileChooser.showOpenDialog(propertiesPane.getScene().getWindow());
                 if (file != null) {
                     lastOpenedDirectory = file.getParentFile();
-                    pathField.setText(relativizePath(file));
+                    pathField.setText(UIUtils.relativizePath(file, currentFile != null ? currentFile.getParentFile() : null));
                 }
             });
 
-            HBox widthBox = createSliderWithNumericField(ie.widthProperty(), 10, 500);
+            HBox widthBox = UIUtils.createSliderWithNumericField(ie.widthProperty(), 10, 500);
             widthBox.disableProperty().bind(ie.imagePathProperty().isEmpty());
             addManagedListener(ie.widthProperty(), (obs, old, newVal) -> {
                 if (!isUpdatingOtherAxis && ie.isLockAspectRatio() && old.doubleValue() > 0) {
@@ -1422,7 +1446,7 @@ public class CardMakerController {
                 }
             });
 
-            HBox heightBox = createSliderWithNumericField(ie.heightProperty(), 10, 500);
+            HBox heightBox = UIUtils.createSliderWithNumericField(ie.heightProperty(), 10, 500);
             heightBox.disableProperty().bind(ie.imagePathProperty().isEmpty());
             addManagedListener(ie.heightProperty(), (obs, old, newVal) -> {
                 if (!isUpdatingOtherAxis && ie.isLockAspectRatio() && old.doubleValue() > 0) {
@@ -1443,15 +1467,14 @@ public class CardMakerController {
                 renderTemplate();
             });
 
-            propertiesPane.getChildren().add(new Label("Path (use {{header}} for merge)"));
-            propertiesPane.getChildren().addAll(new HBox(5, pathField, browseBtn),
-                                            new Label("Width"), widthBox,
-                                            new Label("Height"), heightBox,
-                                            lockAspectBox,
-                                            allowOverflowBox);
+            addProperty("Path (use {{header}} for merge)", new HBox(5, pathField, browseBtn));
+            addProperty("Width", widthBox);
+            addProperty("Height", heightBox);
+            propertiesPane.getChildren().addAll(lockAspectBox, allowOverflowBox);
+
         } else if (el instanceof ContainerElement ce) {
             addSectionLabel("Dimensions");
-            HBox widthBox = createSliderWithNumericField(ce.widthProperty(), 10, 500);
+            HBox widthBox = UIUtils.createSliderWithNumericField(ce.widthProperty(), 10, 500);
             addManagedListener(ce.widthProperty(), (obs, old, newVal) -> {
                 if (!isUpdatingOtherAxis && ce.isLockAspectRatio() && old.doubleValue() > 0) {
                     isUpdatingOtherAxis = true;
@@ -1461,7 +1484,7 @@ public class CardMakerController {
                 }
             });
 
-            HBox heightBox = createSliderWithNumericField(ce.heightProperty(), 10, 500);
+            HBox heightBox = UIUtils.createSliderWithNumericField(ce.heightProperty(), 10, 500);
             addManagedListener(ce.heightProperty(), (obs, old, newVal) -> {
                 if (!isUpdatingOtherAxis && ce.isLockAspectRatio() && old.doubleValue() > 0) {
                     isUpdatingOtherAxis = true;
@@ -1475,7 +1498,7 @@ public class CardMakerController {
             lockAspectBox.selectedProperty().bindBidirectional(ce.lockAspectRatioProperty());
 
             addSectionLabel("Appearance");
-            HBox alphaBox = createSliderWithNumericField(ce.alphaProperty(), 0.0, 1.0);
+            HBox alphaBox = UIUtils.createSliderWithNumericField(ce.alphaProperty(), 0.0, 1.0);
             ColorPicker colorPicker = new ColorPicker(Color.TRANSPARENT);
             colorPicker.setStyle("-fx-color-label-visible: true;");
             colorPicker.setMaxWidth(Double.MAX_VALUE);
@@ -1485,7 +1508,7 @@ public class CardMakerController {
                 // Ignore
             }
             colorPicker.setOnAction(e -> {
-                ce.setBackgroundColor(toHexString(colorPicker.getValue()));
+                ce.setBackgroundColor(UIUtils.toHexString(colorPicker.getValue()));
             });
 
             addSectionLabel("Layout");
@@ -1493,17 +1516,12 @@ public class CardMakerController {
             layoutBox.valueProperty().bindBidirectional(ce.layoutTypeProperty());
             addManagedListener(ce.layoutTypeProperty(), (obs, old, newVal) -> {
                 if (newVal == ContainerElement.LayoutType.POSITIONAL && (old != ContainerElement.LayoutType.POSITIONAL && old != ContainerElement.LayoutType.STACK)) {
-                    // Update children's x and y to their current layoutX and layoutY
-                    // Since layout properties are managed by the container's layout manager,
-                    // we need to find the actual nodes for each child and use their current layout positions.
                     for (Node node : cardCanvas.lookupAll(".text-element, .image-element, .container-element")) {
                         CardElement childEl = (CardElement) node.getProperties().get("cardElement");
                         if (childEl != null && ce.getChildren().contains(childEl)) {
                             childEl.setX(node.getLayoutX());
                             childEl.setY(node.getLayoutY());
                             if (childEl instanceof TextElement te) {
-                                // For Text elements, layoutY is baseline, but our property is top-left
-                                // Adjust by font size since we bind yProperty().add(te.fontSizeProperty())
                                 childEl.setY(node.getLayoutY() - te.getFontSize());
                             }
                         }
@@ -1516,44 +1534,40 @@ public class CardMakerController {
             alignBox.valueProperty().bindBidirectional(ce.alignmentProperty());
             addManagedListener(ce.alignmentProperty(), (obs, old, newVal) -> renderTemplate());
 
-            HBox spacingBox = createSliderWithNumericField(ce.spacingProperty(), 0, 100);
+            HBox spacingBox = UIUtils.createSliderWithNumericField(ce.spacingProperty(), 0, 100);
             addManagedListener(ce.spacingProperty(), (obs, old, newVal) -> renderTemplate());
 
             CheckBox lockedBox = new CheckBox("Locked (Children non-editable)");
             lockedBox.selectedProperty().bindBidirectional(ce.lockedProperty());
             addManagedListener(ce.lockedProperty(), (obs, old, newVal) -> renderTemplate());
 
-            propertiesPane.getChildren().addAll(
-                new Label("Width"), widthBox,
-                new Label("Height"), heightBox,
-                lockAspectBox,
-                new Label("Alpha"), alphaBox,
-                new Label("Color"), colorPicker,
-                new Label("Layout"), layoutBox,
-                new Label("Alignment"), alignBox,
-                new Label("Spacing"), spacingBox,
-                lockedBox
-            );
+            addProperty("Width", widthBox);
+            addProperty("Height", heightBox);
+            propertiesPane.getChildren().add(lockAspectBox);
+            addProperty("Alpha", alphaBox);
+            addProperty("Color", colorPicker);
+            addProperty("Layout", layoutBox);
+            addProperty("Alignment", alignBox);
+            addProperty("Spacing", spacingBox);
+            propertiesPane.getChildren().add(lockedBox);
+
         } else if (el instanceof IconElement ice) {
             TextField valueField = new TextField(ice.getValue());
             valueField.textProperty().bindBidirectional(ice.valueProperty());
             
-            HBox iconWidthBox = createSliderWithNumericField(ice.iconWidthProperty(), 8, 200);
-            HBox iconHeightBox = createSliderWithNumericField(ice.iconHeightProperty(), 8, 200);
+            HBox iconWidthBox = UIUtils.createSliderWithNumericField(ice.iconWidthProperty(), 8, 200);
+            HBox iconHeightBox = UIUtils.createSliderWithNumericField(ice.iconHeightProperty(), 8, 200);
 
             ComboBox<String> mappingBox = new ComboBox<>();
             mappingBox.getItems().addAll(currentTemplate.getIconLibrary().getMappings().keySet());
             mappingBox.valueProperty().bindBidirectional(ice.mappingNameProperty());
 
-            propertiesPane.getChildren().addAll(
-                new Label("Value (supports {{header}})"), valueField,
-                mappingBox
-            );
+            addProperty("Value (supports {{header}})", valueField);
+            addProperty("Icon Mapping", mappingBox);
             addSectionLabel("Icon Dimensions");
-            propertiesPane.getChildren().addAll(
-                new Label("Width"), iconWidthBox,
-                new Label("Height"), iconHeightBox
-            );
+            addProperty("Width", iconWidthBox);
+            addProperty("Height", iconHeightBox);
+
         } else if (el instanceof FontElement fe) {
             ComboBox<String> familyBox = new ComboBox<>(FXCollections.observableArrayList(Font.getFamilies()));
             familyBox.setEditable(true);
@@ -1561,7 +1575,7 @@ public class CardMakerController {
             familyBox.valueProperty().bindBidirectional(fe.fontFamilyProperty());
             addManagedListener(fe.fontFamilyProperty(), (obs, old, newVal) -> renderTemplate());
 
-            HBox sizeBox = createSliderWithNumericField(fe.fontSizeProperty(), 8, 72);
+            HBox sizeBox = UIUtils.createSliderWithNumericField(fe.fontSizeProperty(), 8, 72);
             addManagedListener(fe.fontSizeProperty(), (obs, old, newVal) -> renderTemplate());
 
             ChoiceBox<FontWeight> weightBox = new ChoiceBox<>(FXCollections.observableArrayList(FontWeight.values()));
@@ -1579,57 +1593,37 @@ public class CardMakerController {
             colorPicker.setStyle("-fx-color-label-visible: true;");
             colorPicker.setMaxWidth(Double.MAX_VALUE);
             colorPicker.setOnAction(e -> {
-                fe.setColor(toHexString(colorPicker.getValue()));
+                fe.setColor(UIUtils.toHexString(colorPicker.getValue()));
                 renderTemplate();
             });
 
-            HBox angleBox = createSliderWithNumericField(fe.angleProperty(), -360, 360);
+            HBox angleBox = UIUtils.createSliderWithNumericField(fe.angleProperty(), -360, 360);
             addManagedListener(fe.angleProperty(), (obs, old, newVal) -> renderTemplate());
 
-            HBox outlineWidthBox = createSliderWithNumericField(fe.outlineWidthProperty(), 0, 20);
+            HBox outlineWidthBox = UIUtils.createSliderWithNumericField(fe.outlineWidthProperty(), 0, 20);
             addManagedListener(fe.outlineWidthProperty(), (obs, old, newVal) -> renderTemplate());
 
             ColorPicker outlineColorPicker = new ColorPicker(Color.web(fe.getOutlineColor()));
             outlineColorPicker.setStyle("-fx-color-label-visible: true;");
             outlineColorPicker.setMaxWidth(Double.MAX_VALUE);
             outlineColorPicker.setOnAction(e -> {
-                fe.setOutlineColor(toHexString(outlineColorPicker.getValue()));
+                fe.setOutlineColor(UIUtils.toHexString(outlineColorPicker.getValue()));
                 renderTemplate();
             });
 
-            propertiesPane.getChildren().addAll(
-                new Label("Family"), familyBox,
-                new Label("Size"), sizeBox,
-                new Label("Weight"), weightBox,
-                new Label("Posture"), postureBox,
-                new Label("Color"), colorPicker,
-                new Label("Angle"), angleBox,
-                new Label("Outline Width"), outlineWidthBox,
-                new Label("Outline Color"), outlineColorPicker
-            );
+            addProperty("Family", familyBox);
+            addProperty("Size", sizeBox);
+            addProperty("Weight", weightBox);
+            addProperty("Posture", postureBox);
+            addProperty("Color", colorPicker);
+            addProperty("Angle", angleBox);
+            addProperty("Outline Width", outlineWidthBox);
+            addProperty("Outline Color", outlineColorPicker);
         }
     }
 
 
-    private String toHexString(Color color) {
-        return String.format("#%02X%02X%02X",
-                (int)(color.getRed() * 255),
-                (int)(color.getGreen() * 255),
-                (int)(color.getBlue() * 255));
-    }
 
-    private String relativizePath(File file) {
-        if (file == null) return null;
-        String path = file.getAbsolutePath();
-        if (currentFile != null) {
-            try {
-                path = currentFile.getParentFile().toPath().relativize(file.toPath()).toString();
-            } catch (IllegalArgumentException ex) {
-                // Different drives, use absolute path
-            }
-        }
-        return path;
-    }
 
     private void addMappingRow(Map<String, String> iconMap, String charStr, VBox container) {
         HBox row = new HBox(10);
@@ -1662,7 +1656,7 @@ public class CardMakerController {
             File file = fileChooser.showOpenDialog(propertiesPane.getScene().getWindow());
             if (file != null) {
                 lastOpenedDirectory = file.getParentFile();
-                pathField.setText(relativizePath(file));
+                pathField.setText(UIUtils.relativizePath(file, currentFile != null ? currentFile.getParentFile() : null));
             }
         });
 
@@ -1744,27 +1738,22 @@ public class CardMakerController {
 
     @FXML
     void handleAddText(ActionEvent event) {
-        CardElement newEl = new TextElement("New Text");
-        addElement(newEl);
+        addElement(new TextElement());
     }
 
     @FXML
     void handleAddImage(ActionEvent event) {
-        CardElement newEl = new ImageElement("New Image");
-        addElement(newEl);
+        addElement(new ImageElement());
     }
 
     @FXML
     void handleAddContainer(ActionEvent event) {
-        CardElement newEl = new ContainerElement("New Container");
-        addElement(newEl);
+        addElement(new ContainerElement());
     }
 
     @FXML
     void handleAddFont(ActionEvent event) {
-        CardElement newEl = new FontElement("New Font Config");
-        addElement(newEl);
-        updatePropertiesPane(newEl);
+        addElement(new FontElement());
     }
 
     @FXML
@@ -1962,7 +1951,7 @@ public class CardMakerController {
                         updatePropertiesPane(getSelectedElement());
                     });
 
-                    HBox sizeBox = createSliderWithNumericField(fontEl.fontSizeProperty(), 8, 120);
+                    HBox sizeBox = UIUtils.createSliderWithNumericField(fontEl.fontSizeProperty(), 8, 120);
                     fontEl.fontSizeProperty().addListener((o, ov, nv) -> {
                         renderTemplate();
                         updatePropertiesPane(getSelectedElement());
@@ -1990,18 +1979,18 @@ public class CardMakerController {
                     colorPicker.setStyle("-fx-color-label-visible: true;");
                     colorPicker.setMaxWidth(Double.MAX_VALUE);
                     colorPicker.setOnAction(ce -> {
-                        fontEl.setColor(toHexString(colorPicker.getValue()));
+                        fontEl.setColor(UIUtils.toHexString(colorPicker.getValue()));
                         renderTemplate();
                         updatePropertiesPane(getSelectedElement());
                     });
 
-                    HBox angleBox = createSliderWithNumericField(fontEl.angleProperty(), -360, 360);
+                    HBox angleBox = UIUtils.createSliderWithNumericField(fontEl.angleProperty(), -360, 360);
                     fontEl.angleProperty().addListener((o, ov, nv) -> {
                         renderTemplate();
                         updatePropertiesPane(getSelectedElement());
                     });
 
-                    HBox outlineWidthBox = createSliderWithNumericField(fontEl.outlineWidthProperty(), 0, 20);
+                    HBox outlineWidthBox = UIUtils.createSliderWithNumericField(fontEl.outlineWidthProperty(), 0, 20);
                     fontEl.outlineWidthProperty().addListener((o, ov, nv) -> {
                         renderTemplate();
                         updatePropertiesPane(getSelectedElement());
@@ -2011,7 +2000,7 @@ public class CardMakerController {
                     outlineColorPicker.setStyle("-fx-color-label-visible: true;");
                     outlineColorPicker.setMaxWidth(Double.MAX_VALUE);
                     outlineColorPicker.setOnAction(ce -> {
-                        fontEl.setOutlineColor(toHexString(outlineColorPicker.getValue()));
+                        fontEl.setOutlineColor(UIUtils.toHexString(outlineColorPicker.getValue()));
                         renderTemplate();
                         updatePropertiesPane(getSelectedElement());
                     });
@@ -2073,8 +2062,8 @@ public class CardMakerController {
 
     private void addElement(CardElement newEl) {
         CardElement selected = getSelectedElement();
-        if (selected instanceof ContainerElement ce) {
-            ce.getChildren().add(newEl);
+        if (selected instanceof ParentCardElement pe) {
+            pe.getChildren().add(newEl);
         } else if (selected != null) {
             ObservableList<CardElement> parentList = findParentList(selected);
             if (parentList != null) {
@@ -2114,70 +2103,55 @@ public class CardMakerController {
         return null;
     }
 
-    @FXML
-    void handleMoveForward(ActionEvent event) {
+    private void moveSelectedElement(java.util.function.BiConsumer<ObservableList<CardElement>, CardElement> moveAction) {
         CardElement selected = getSelectedElement();
         if (selected != null) {
             saveExpandedState(elementTreeView.getRoot());
             ObservableList<CardElement> parentList = findParentList(selected);
             if (parentList != null) {
-                int index = parentList.indexOf(selected);
-                if (index < parentList.size() - 1) {
-                    parentList.remove(selected);
-                    parentList.add(index + 1, selected);
-                    renderTemplate();
-                    selectElement(selected);
-                }
+                moveAction.accept(parentList, selected);
+                // No need to call renderTemplate() here as nestedListener handles it
+                selectElement(selected);
             }
         }
+    }
+
+    @FXML
+    void handleMoveForward(ActionEvent event) {
+        moveSelectedElement((list, el) -> {
+            int index = list.indexOf(el);
+            if (index < list.size() - 1) {
+                list.remove(el);
+                list.add(index + 1, el);
+            }
+        });
     }
 
     @FXML
     void handleMoveBackward(ActionEvent event) {
-        CardElement selected = getSelectedElement();
-        if (selected != null) {
-            saveExpandedState(elementTreeView.getRoot());
-            ObservableList<CardElement> parentList = findParentList(selected);
-            if (parentList != null) {
-                int index = parentList.indexOf(selected);
-                if (index > 0) {
-                    parentList.remove(selected);
-                    parentList.add(index - 1, selected);
-                    renderTemplate();
-                    selectElement(selected);
-                }
+        moveSelectedElement((list, el) -> {
+            int index = list.indexOf(el);
+            if (index > 0) {
+                list.remove(el);
+                list.add(index - 1, el);
             }
-        }
+        });
     }
 
     @FXML
     void handleBringToFront(ActionEvent event) {
-        CardElement selected = getSelectedElement();
-        if (selected != null) {
-            saveExpandedState(elementTreeView.getRoot());
-            ObservableList<CardElement> parentList = findParentList(selected);
-            if (parentList != null) {
-                parentList.remove(selected);
-                parentList.add(selected);
-                renderTemplate();
-                selectElement(selected);
-            }
-        }
+        moveSelectedElement((list, el) -> {
+            list.remove(el);
+            list.add(el);
+        });
     }
 
     @FXML
     void handleSendToBack(ActionEvent event) {
-        CardElement selected = getSelectedElement();
-        if (selected != null) {
-            saveExpandedState(elementTreeView.getRoot());
-            ObservableList<CardElement> parentList = findParentList(selected);
-            if (parentList != null) {
-                parentList.remove(selected);
-                parentList.add(0, selected);
-                renderTemplate();
-                selectElement(selected);
-            }
-        }
+        moveSelectedElement((list, el) -> {
+            list.remove(el);
+            list.add(0, el);
+        });
     }
 
     private ParentCardElement findParentElement(CardElement el) {
