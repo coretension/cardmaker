@@ -1705,9 +1705,10 @@ public class CardMakerController {
             fileChooser.setInitialDirectory(lastOpenedDirectory);
         }
         fileChooser.getExtensionFilters().addAll(
-                new FileChooser.ExtensionFilter("Data Files", "*.csv", "*.ods"),
+                new FileChooser.ExtensionFilter("Data Files", "*.csv", "*.ods", "*.xlsx"),
                 new FileChooser.ExtensionFilter("CSV Files", "*.csv"),
-                new FileChooser.ExtensionFilter("ODS Files", "*.ods")
+                new FileChooser.ExtensionFilter("ODS Files", "*.ods"),
+                new FileChooser.ExtensionFilter("Excel Files", "*.xlsx")
         );
         File file = fileChooser.showOpenDialog(propertiesPane.getScene().getWindow());
         if (file != null) {

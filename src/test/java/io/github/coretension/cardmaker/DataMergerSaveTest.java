@@ -79,4 +79,47 @@ public class DataMergerSaveTest {
             odsFile.delete();
         }
     }
+
+    @Test
+    public void testSaveAndLoadXlsx() throws Exception {
+        DataMerger dataMerger = new DataMerger();
+        List<String> headers = List.of("Name", "Value", "Numeric");
+        List<Map<String, String>> records = new ArrayList<>();
+
+        Map<String, String> r1 = new HashMap<>();
+        r1.put("Name", "Item 1");
+        r1.put("Value", "Text 1");
+        r1.put("Numeric", "123");
+        records.add(r1);
+
+        Map<String, String> r2 = new HashMap<>();
+        r2.put("Name", "Item 2");
+        r2.put("Value", "Text 2");
+        r2.put("Numeric", "45.6");
+        records.add(r2);
+
+        File tempFile = Files.createTempFile("testdata", ".xlsx").toFile();
+        try {
+            dataMerger.saveXlsx(tempFile.getAbsolutePath(), headers, records);
+
+            assertTrue(tempFile.exists());
+            assertTrue(tempFile.length() > 0);
+
+            DataMerger.CsvResult loaded = dataMerger.loadXlsx(tempFile.getAbsolutePath());
+
+            assertEquals(headers, loaded.headers);
+            assertEquals(2, loaded.records.size());
+
+            assertEquals("Item 1", loaded.records.get(0).get("Name"));
+            assertEquals("Text 1", loaded.records.get(0).get("Value"));
+            assertEquals("123", loaded.records.get(0).get("Numeric"));
+
+            assertEquals("Item 2", loaded.records.get(1).get("Name"));
+            assertEquals("Text 2", loaded.records.get(1).get("Value"));
+            assertEquals("45.6", loaded.records.get(1).get("Numeric"));
+
+        } finally {
+            tempFile.delete();
+        }
+    }
 }

@@ -12,6 +12,7 @@ module io.github.coretension.cardmaker {
     requires com.opencsv;
     requires com.fasterxml.jackson.databind;
     requires com.github.librepdf.openpdf;
+    requires org.apache.poi.ooxml;
 
     opens io.github.coretension.cardmaker to javafx.fxml, com.fasterxml.jackson.databind;
     exports io.github.coretension.cardmaker;
