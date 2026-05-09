@@ -74,23 +74,24 @@ public class CardMakerController {
     private File currentFile;
     private File lastOpenedDirectory;
     private AppSettings settings;
-    private boolean previewMode = false;
-    private boolean professionalMode = false;
-    private boolean showClippedContent = false;
-    private double zoomLevel = 1.0;
     private CardElement copiedElement;
     private long lastCsvModificationTime = 0;
-    private boolean isDirty = false;
+    private final ControllerState state = new ControllerState();
     private Stage iconLibraryStage;
     private Stage fontLibraryStage;
     private Stage dataViewerStage;
     private static final double SNAP_THRESHOLD_PX = 6.0;
     private final List<Node> activeSnapGuides = new ArrayList<>();
-    private boolean restoringPanelDividers = false;
-    private boolean persistPanelDividers = false;
 
     @FXML
     public void initialize() {
+        state.setPreviewMode(false);
+        state.setProfessionalMode(false);
+        state.setShowClippedContent(false);
+        state.setZoomLevel(1.0);
+        state.setDirty(false);
+        state.setRestoringPanelDividers(false);
+        state.setPersistPanelDividers(false);
         loadSettings();
         applySavedPanelDividerPositions();
         setupPanelDividerPersistence();
@@ -674,7 +675,7 @@ public class CardMakerController {
         // First clear all effects and hide resize handles
         clearAllHighlights(cardCanvas);
 
-        if (selectedEl == null || previewMode) return;
+        if (selectedEl == null || state.isPreviewMode()) return;
 
         // Find the node corresponding to the selected element
         Node found = findNodeForElement(cardCanvas, selectedEl);
@@ -730,7 +731,7 @@ public class CardMakerController {
         cardCanvas.setSnapToPixel(false);
         double width = currentTemplate.getDimension().getWidthPx();
         double height = currentTemplate.getDimension().getHeightPx();
-        double bleedPx = professionalMode ? currentTemplate.getBleedMm() * (CardDimension.getDpi() / 25.4) : 0;
+        double bleedPx = state.isProfessionalMode() ? currentTemplate.getBleedMm() * (CardDimension.getDpi() / 25.4) : 0;
         
         cardCanvas.setMinWidth(width + 2 * bleedPx);
         cardCanvas.setMaxWidth(width + 2 * bleedPx);
@@ -739,7 +740,7 @@ public class CardMakerController {
         
         updateSizeLabel();
         
-        if (!showClippedContent) {
+        if (!state.isShowClippedContent()) {
             javafx.scene.shape.Rectangle clip = new javafx.scene.shape.Rectangle(width + 2 * bleedPx, height + 2 * bleedPx);
             cardCanvas.setClip(clip);
         } else {
@@ -749,7 +750,7 @@ public class CardMakerController {
 
     private void renderTemplate() {
         cardCanvas.getChildren().clear();
-        double bleedPx = professionalMode ? currentTemplate.getBleedMm() * (CardDimension.getDpi() / 25.4) : 0;
+        double bleedPx = state.isProfessionalMode() ? currentTemplate.getBleedMm() * (CardDimension.getDpi() / 25.4) : 0;
         
         Map<String, String> currentRecord = (currentRecordIndex >= 0 && currentRecordIndex < csvData.size()) 
                 ? csvData.get(currentRecordIndex) : null;
@@ -762,7 +763,7 @@ public class CardMakerController {
         renderElements(currentTemplate.getElements(), contentPane, currentRecord, null, ContainerElement.LayoutType.POSITIONAL, ContainerElement.Alignment.LEFT, false, false);
         
         // Add bleed guide last so it's always visible
-        if (professionalMode && !previewMode) {
+        if (state.isProfessionalMode() && !state.isPreviewMode()) {
             javafx.scene.shape.Rectangle bleedGuide = new javafx.scene.shape.Rectangle(bleedPx, bleedPx, 
                     currentTemplate.getDimension().getWidthPx(), currentTemplate.getDimension().getHeightPx());
             bleedGuide.setFill(Color.TRANSPARENT);
@@ -1148,7 +1149,7 @@ public class CardMakerController {
         ce.backgroundColorProperty().addListener((obs, old, newVal) -> updatePaneStyle(pane, newVal, ce.getAlpha(), forFinalDesign));
         ce.alphaProperty().addListener((obs, old, newVal) -> updatePaneStyle(pane, ce.getBackgroundColor(), newVal.doubleValue(), forFinalDesign));
 
-        if (!showClippedContent || forFinalDesign) {
+        if (!state.isShowClippedContent() || forFinalDesign) {
             javafx.scene.shape.Rectangle clip = new javafx.scene.shape.Rectangle();
             clip.widthProperty().bind(pane.widthProperty());
             clip.heightProperty().bind(pane.heightProperty());
@@ -1246,7 +1247,7 @@ public class CardMakerController {
             
             // Ensure container is visible with a subtle dashed border even if background is transparent
             StringBuilder style = new StringBuilder("-fx-background-color: " + alphaColor + "; ");
-            if (!previewMode && !forFinalDesign) {
+            if (!state.isPreviewMode() && !forFinalDesign) {
                 style.append("-fx-border-color: #888888; "); // Stronger border color
                 style.append("-fx-border-style: dashed; ");
                 style.append("-fx-border-width: 1; ");
@@ -1583,7 +1584,7 @@ public class CardMakerController {
 
     private void showSnapGuides(SnapResult xSnap, SnapResult ySnap) {
         clearSnapGuides();
-        double bleedPx = professionalMode ? currentTemplate.getBleedMm() * (CardDimension.getDpi() / 25.4) : 0;
+        double bleedPx = state.isProfessionalMode() ? currentTemplate.getBleedMm() * (CardDimension.getDpi() / 25.4) : 0;
         double cardWidth = currentTemplate.getDimension().getWidthPx();
         double cardHeight = currentTemplate.getDimension().getHeightPx();
 
@@ -2076,7 +2077,7 @@ public class CardMakerController {
             csvHeaders = new ArrayList<>();
             currentRecordIndex = -1;
             lastCsvModificationTime = 0;
-            isDirty = false;
+            state.setDirty(false);
             setupTemplateListeners();
             updateCanvasSize();
             updateRecordLabel();
@@ -3020,15 +3021,15 @@ public class CardMakerController {
     }
 
     public boolean isProfessionalMode() {
-        return professionalMode;
+        return state.isProfessionalMode();
     }
 
     @FXML
     void handleToggleProfessionalMode(ActionEvent event) {
         if (event.getSource() instanceof CheckMenuItem ci) {
-            professionalMode = ci.isSelected();
+            state.setProfessionalMode(ci.isSelected());
         }
-        if (proModeMenuItem != null) proModeMenuItem.setSelected(professionalMode);
+        if (proModeMenuItem != null) proModeMenuItem.setSelected(state.isProfessionalMode());
         updateCanvasSize();
         renderTemplate();
     }
@@ -3036,47 +3037,47 @@ public class CardMakerController {
     @FXML
     void handleTogglePreviewMode(ActionEvent event) {
         if (event.getSource() instanceof CheckMenuItem ci) {
-            previewMode = ci.isSelected();
+            state.setPreviewMode(ci.isSelected());
         } else if (event.getSource() instanceof ToggleButton tb) {
-            previewMode = tb.isSelected();
+            state.setPreviewMode(tb.isSelected());
         }
         
         // Sync both UI elements
-        if (previewToolbarBtn != null) previewToolbarBtn.setSelected(previewMode);
-        if (previewMenuItem != null) previewMenuItem.setSelected(previewMode);
+        if (previewToolbarBtn != null) previewToolbarBtn.setSelected(state.isPreviewMode());
+        if (previewMenuItem != null) previewMenuItem.setSelected(state.isPreviewMode());
         
         renderTemplate();
     }
 
     @FXML
     void handleToggleShowClippedContent(ActionEvent event) {
-        showClippedContent = ((CheckMenuItem) event.getSource()).isSelected();
+        state.setShowClippedContent(((CheckMenuItem) event.getSource()).isSelected());
         updateCanvasSize();
         renderTemplate();
     }
 
     @FXML
     void handleZoomIn(ActionEvent event) {
-        zoomLevel *= 1.2;
+        state.setZoomLevel(state.getZoomLevel() * 1.2);
         updateZoom();
     }
 
     @FXML
     void handleZoomOut(ActionEvent event) {
-        zoomLevel /= 1.2;
+        state.setZoomLevel(state.getZoomLevel() / 1.2);
         updateZoom();
     }
 
     @FXML
     void handleResetZoom(ActionEvent event) {
-        zoomLevel = 1.0;
+        state.setZoomLevel(1.0);
         updateZoom();
     }
 
     private void updateZoom() {
-        cardCanvas.setScaleX(zoomLevel);
-        cardCanvas.setScaleY(zoomLevel);
-        String zoomText = String.format("%.0f%%", zoomLevel * 100);
+        cardCanvas.setScaleX(state.getZoomLevel());
+        cardCanvas.setScaleY(state.getZoomLevel());
+        String zoomText = String.format("%.0f%%", state.getZoomLevel() * 100);
         zoomLabel.setText(zoomText);
         if (zoomToolbarLabel != null) {
             zoomToolbarLabel.setText(zoomText);
@@ -3100,9 +3101,9 @@ public class CardMakerController {
         target.addEventFilter(ScrollEvent.SCROLL, event -> {
             if (event.isControlDown() || event.isShortcutDown()) {
                 if (event.getDeltaY() > 0) {
-                    zoomLevel *= 1.1;
+                    state.setZoomLevel(state.getZoomLevel() * 1.1);
                 } else if (event.getDeltaY() < 0) {
-                    zoomLevel /= 1.1;
+                    state.setZoomLevel(state.getZoomLevel() / 1.1);
                 }
                 updateZoom();
                 event.consume();
@@ -3218,7 +3219,7 @@ public class CardMakerController {
             closeTemplateEditorWindows();
             applyTemplate(template);
             selectTreePath(selectedPath);
-            isDirty = true;
+            state.setDirty(true);
             saveTempDeck();
             updateTitleAndStatus(statusMessage);
         } finally {
@@ -3251,8 +3252,8 @@ public class CardMakerController {
     }
 
     public void saveTempDeck() {
-        if (!isDirty) {
-            isDirty = true;
+        if (!state.isDirty()) {
+            state.setDirty(true);
             updateTitleAndStatus();
         }
         try {
@@ -3268,7 +3269,7 @@ public class CardMakerController {
         if (tempFile.exists()) {
             try {
                 CardTemplate template = DeckStorage.load(tempFile);
-                isDirty = true;
+                state.setDirty(true);
                 applyTemplate(template);
             } catch (IOException e) {
                 System.err.println("Failed to load temp deck: " + e.getMessage());
@@ -3286,8 +3287,8 @@ public class CardMakerController {
     private void loadSettings() {
         try {
             settings = DeckStorage.loadSettings();
-            professionalMode = settings.isProfessionalMode();
-            if (proModeMenuItem != null) proModeMenuItem.setSelected(professionalMode);
+            state.setProfessionalMode(settings.isProfessionalMode());
+            if (proModeMenuItem != null) proModeMenuItem.setSelected(state.isProfessionalMode());
             if (settings.getLastOpenedDeckPath() != null) {
                 lastOpenedDirectory = new File(settings.getLastOpenedDeckPath()).getParentFile();
             }
@@ -3301,7 +3302,7 @@ public class CardMakerController {
         if (settings == null || mainSplitPane == null) {
             return;
         }
-        persistPanelDividers = false;
+        state.setPersistPanelDividers(false);
         Runnable applyPositions = () -> {
             if (mainSplitPane.getDividers().size() < 2) {
                 return;
@@ -3312,16 +3313,16 @@ public class CardMakerController {
                 left = 0.22;
                 right = 0.78;
             }
-            restoringPanelDividers = true;
+            state.setRestoringPanelDividers(true);
             mainSplitPane.setDividerPositions(left, right);
-            restoringPanelDividers = false;
+            state.setRestoringPanelDividers(false);
         };
         Platform.runLater(() -> {
             applyPositions.run();
             // Apply again after an extra pulse to prevent startup layout from overriding restored positions.
             Platform.runLater(() -> {
                 applyPositions.run();
-                persistPanelDividers = true;
+                state.setPersistPanelDividers(true);
             });
         });
     }
@@ -3335,14 +3336,14 @@ public class CardMakerController {
                 return;
             }
             mainSplitPane.getDividers().get(0).positionProperty().addListener((obs, oldVal, newVal) -> {
-                if (restoringPanelDividers || !persistPanelDividers) {
+                if (state.isRestoringPanelDividers() || !state.isPersistPanelDividers()) {
                     return;
                 }
                 settings.setLeftPanelDividerPosition(newVal.doubleValue());
                 saveSettings();
             });
             mainSplitPane.getDividers().get(1).positionProperty().addListener((obs, oldVal, newVal) -> {
-                if (restoringPanelDividers || !persistPanelDividers) {
+                if (state.isRestoringPanelDividers() || !state.isPersistPanelDividers()) {
                     return;
                 }
                 settings.setRightPanelDividerPosition(newVal.doubleValue());
@@ -3353,7 +3354,7 @@ public class CardMakerController {
 
     public void saveSettings() {
         try {
-            settings.setProfessionalMode(professionalMode);
+            settings.setProfessionalMode(state.isProfessionalMode());
             if (mainSplitPane != null && mainSplitPane.getScene() != null) {
                 Window window = mainSplitPane.getScene().getWindow();
                 if (window instanceof Stage stage) {
@@ -3469,7 +3470,7 @@ public class CardMakerController {
             lastOpenedDirectory = file.getParentFile();
             CardTemplate template = DeckStorage.load(file);
             currentFile = file;
-            isDirty = false;
+            state.setDirty(false);
             settings.setLastOpenedDeckPath(file.getAbsolutePath());
             saveSettings();
             applyTemplate(template);
@@ -3487,7 +3488,7 @@ public class CardMakerController {
         try {
             DeckStorage.save(currentTemplate, file);
             currentFile = file;
-            isDirty = false;
+            state.setDirty(false);
             settings.setLastOpenedDeckPath(file.getAbsolutePath());
             saveSettings();
             updateTitleAndStatus("Saved: " + file.getName());
@@ -3511,7 +3512,7 @@ public class CardMakerController {
 
     private void updateTitleAndStatus(String temporaryMessage) {
         String deckName = (currentFile != null) ? currentFile.getName() : "Unsaved Deck";
-        if (isDirty) {
+        if (state.isDirty()) {
             deckName += " (modified)";
         }
         String modeBadges = buildModeBadges();
@@ -3524,15 +3525,15 @@ public class CardMakerController {
         }
 
         if (propertiesPane.getScene() != null && propertiesPane.getScene().getWindow() instanceof Stage stage) {
-            stage.setTitle("CardMaker - " + (currentFile != null ? currentFile.getName() : "Unsaved") + (isDirty ? "*" : ""));
+            stage.setTitle("CardMaker - " + (currentFile != null ? currentFile.getName() : "Unsaved") + (state.isDirty() ? "*" : ""));
         }
     }
 
     private String buildModeBadges() {
         List<String> badges = new ArrayList<>();
-        if (professionalMode) badges.add("PRO");
-        if (previewMode) badges.add("PREVIEW");
-        if (showClippedContent) badges.add("CLIPPED");
+        if (state.isProfessionalMode()) badges.add("PRO");
+        if (state.isPreviewMode()) badges.add("PREVIEW");
+        if (state.isShowClippedContent()) badges.add("CLIPPED");
         return badges.isEmpty() ? "" : " | [" + String.join("] [", badges) + "]";
     }
 

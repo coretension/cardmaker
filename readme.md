@@ -2,7 +2,7 @@
 
 This project is a tool for creating and managing custom card game templates and data.
 
-![CardMaker Preview](resources/img.png)
+![CardMaker Preview](resources/img_old.png)
 
 ## How to Download and Run
 ### Windows
