@@ -1,6 +1,8 @@
 package io.github.coretension.cardmaker.app;
 
+import io.github.coretension.cardmaker.config.AppSettings;
 import io.github.coretension.cardmaker.model.CardDimension;
+import io.github.coretension.cardmaker.persistence.DeckStorage;
 import io.github.coretension.cardmaker.ui.CardMakerController;
 import javafx.application.Application;
 import javafx.fxml.FXMLLoader;
@@ -26,9 +28,18 @@ public class CardMakerApplication extends Application {
         double screenDpi = Screen.getPrimary().getDpi();
         CardDimension.setDpi(screenDpi);
 
+        AppSettings settings;
+        try {
+            settings = DeckStorage.loadSettings();
+        } catch (IOException e) {
+            settings = new AppSettings();
+        }
+        double width = settings.getWindowWidth() > 0 ? settings.getWindowWidth() : 1000;
+        double height = settings.getWindowHeight() > 0 ? settings.getWindowHeight() : 700;
+
         FXMLLoader fxmlLoader = new FXMLLoader(CardMakerApplication.class.getResource(
                 "/io/github/coretension/cardmaker/card-maker-view.fxml"));
-        Scene scene = new Scene(fxmlLoader.load(), 1000, 700);
+        Scene scene = new Scene(fxmlLoader.load(), width, height);
         CardMakerController controller = fxmlLoader.getController();
 
         stage.setTitle("Card Maker");

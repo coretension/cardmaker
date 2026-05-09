@@ -12,6 +12,10 @@ public class AppSettings {
     private double leftPanelDividerPosition = 0.22;
     /** Divider position between canvas and properties panel. */
     private double rightPanelDividerPosition = 0.78;
+    /** Main window width. */
+    private double windowWidth = 1000;
+    /** Main window height. */
+    private double windowHeight = 700;
 
     /** @return the last opened deck path */
     public String getLastOpenedDeckPath() {
@@ -51,5 +55,25 @@ public class AppSettings {
     /** @param rightPanelDividerPosition divider position between canvas and properties panel */
     public void setRightPanelDividerPosition(double rightPanelDividerPosition) {
         this.rightPanelDividerPosition = rightPanelDividerPosition;
+    }
+
+    /** @return main window width */
+    public double getWindowWidth() {
+        return windowWidth;
+    }
+
+    /** @param windowWidth main window width */
+    public void setWindowWidth(double windowWidth) {
+        this.windowWidth = windowWidth;
+    }
+
+    /** @return main window height */
+    public double getWindowHeight() {
+        return windowHeight;
+    }
+
+    /** @param windowHeight main window height */
+    public void setWindowHeight(double windowHeight) {
+        this.windowHeight = windowHeight;
     }
 }

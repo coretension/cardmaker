@@ -33,6 +33,7 @@ import javafx.scene.text.FontWeight;
 import javafx.scene.text.Text;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
+import javafx.stage.Window;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
@@ -85,6 +86,8 @@ public class CardMakerController {
     private Stage dataViewerStage;
     private static final double SNAP_THRESHOLD_PX = 6.0;
     private final List<Node> activeSnapGuides = new ArrayList<>();
+    private boolean restoringPanelDividers = false;
+    private boolean persistPanelDividers = false;
 
     @FXML
     public void initialize() {
@@ -1790,7 +1793,7 @@ public class CardMakerController {
                 renderTemplate();
             });
             
-            Button browseBtn = new Button("Browse...");
+            Button browseBtn = new Button("📁 Browse...");
             browseBtn.setMaxWidth(Double.MAX_VALUE);
             browseBtn.setOnAction(e -> {
                 FileChooser fileChooser = new FileChooser();
@@ -2026,7 +2029,7 @@ public class CardMakerController {
             saveTempDeck();
         });
 
-        Button browseBtn = new Button("...");
+        Button browseBtn = new Button("📁");
         browseBtn.setTooltip(new Tooltip("Browse for image"));
         browseBtn.setOnAction(e -> {
             FileChooser fileChooser = new FileChooser();
@@ -3298,7 +3301,8 @@ public class CardMakerController {
         if (settings == null || mainSplitPane == null) {
             return;
         }
-        Platform.runLater(() -> {
+        persistPanelDividers = false;
+        Runnable applyPositions = () -> {
             if (mainSplitPane.getDividers().size() < 2) {
                 return;
             }
@@ -3308,7 +3312,17 @@ public class CardMakerController {
                 left = 0.22;
                 right = 0.78;
             }
+            restoringPanelDividers = true;
             mainSplitPane.setDividerPositions(left, right);
+            restoringPanelDividers = false;
+        };
+        Platform.runLater(() -> {
+            applyPositions.run();
+            // Apply again after an extra pulse to prevent startup layout from overriding restored positions.
+            Platform.runLater(() -> {
+                applyPositions.run();
+                persistPanelDividers = true;
+            });
         });
     }
 
@@ -3321,10 +3335,16 @@ public class CardMakerController {
                 return;
             }
             mainSplitPane.getDividers().get(0).positionProperty().addListener((obs, oldVal, newVal) -> {
+                if (restoringPanelDividers || !persistPanelDividers) {
+                    return;
+                }
                 settings.setLeftPanelDividerPosition(newVal.doubleValue());
                 saveSettings();
             });
             mainSplitPane.getDividers().get(1).positionProperty().addListener((obs, oldVal, newVal) -> {
+                if (restoringPanelDividers || !persistPanelDividers) {
+                    return;
+                }
                 settings.setRightPanelDividerPosition(newVal.doubleValue());
                 saveSettings();
             });
@@ -3334,6 +3354,13 @@ public class CardMakerController {
     public void saveSettings() {
         try {
             settings.setProfessionalMode(professionalMode);
+            if (mainSplitPane != null && mainSplitPane.getScene() != null) {
+                Window window = mainSplitPane.getScene().getWindow();
+                if (window instanceof Stage stage) {
+                    settings.setWindowWidth(stage.getWidth());
+                    settings.setWindowHeight(stage.getHeight());
+                }
+            }
             if (mainSplitPane != null && mainSplitPane.getDividers().size() >= 2) {
                 settings.setLeftPanelDividerPosition(mainSplitPane.getDividers().get(0).getPosition());
                 settings.setRightPanelDividerPosition(mainSplitPane.getDividers().get(1).getPosition());

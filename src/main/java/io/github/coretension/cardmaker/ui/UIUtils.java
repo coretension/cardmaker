@@ -14,7 +14,7 @@ public class UIUtils {
 
     public static HBox createSliderWithNumericField(DoubleProperty property, double min, double max) {
         Slider slider = new Slider(min, max, property.get());
-        slider.setMinWidth(150);
+        slider.setMinWidth(100);
         slider.setMaxWidth(Double.MAX_VALUE);
         HBox.setHgrow(slider, Priority.ALWAYS);
         slider.valueProperty().bindBidirectional(property);
